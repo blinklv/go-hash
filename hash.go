@@ -10,17 +10,42 @@
 package main
 
 import (
-	"flag"
-	"fmt"
+	"crypto/md5"
+	"crypto/sha1"
+	"crypto/sha256"
+	"crypto/sha512"
+	"errors"
 	"hash"
+	"hash/fnv"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
 )
 
-var h hash.Hash
+var (
+	h hash.Hash
+
+	hashMap = map[string]hash.Hash{
+		"md5":        md5.New(),
+		"sha1":       sha1.New(),
+		"sha224":     sha256.New224(),
+		"sha256":     sha256.New(),
+		"sha384":     sha512.New384(),
+		"sha512":     sha512.New(),
+		"sha512/224": sha512.New512_224(),
+		"sha512/256": sha512.New512_256(),
+		"fnv32":      fnv.New32(),
+		"fnv32a":     fnv.New32a(),
+		"fnv64":      fnv.New64(),
+		"fnv64a":     fnv.New64a(),
+		"fnv128":     fnv.New128(),
+		"fnv128a":    fnv.New128a(),
+	}
+)
 
 func main() {
+	return
 }
 
 type result struct {
@@ -29,8 +54,8 @@ type result struct {
 	err  error
 }
 
-func hashAll(root string, done chan struct{}) (map[string][]byte, error) {
-	results, errc := sum(root, done)
+func hashAll(roots []string, done chan struct{}) (map[string][]byte, error) {
+	results, errc := sum(roots, done)
 	m := make(map[string][]byte)
 	for r := range results {
 		if r.err != nil {
