@@ -29,10 +29,7 @@ type result struct {
 	err  error
 }
 
-func hashAll(root string) (map[string][]byte, error) {
-	done := make(chan struct{})
-	defer close(done)
-
+func hashAll(root string, done chan struct{}) (map[string][]byte, error) {
 	results, errc := sum(root, done)
 	m := make(map[string][]byte)
 	for r := range results {
@@ -42,8 +39,10 @@ func hashAll(root string) (map[string][]byte, error) {
 		m[r.path] = r.sum
 	}
 
-	if err := <-errc; err != nil {
-		return nil, err
+	for err := range errc {
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return m, nil
@@ -54,9 +53,9 @@ func hashAll(root string) (map[string][]byte, error) {
 // digest to reduce side effects for OS.
 const numDigester = 16
 
-func sum(root string, done <-chan struct{}) (<-chan result, <-chan error) {
+func sum(roots []string, done <-chan struct{}) (<-chan result, <-chan error) {
 	results := make(chan result)
-	paths, errc := walk(root, done)
+	paths, errc := walk(roots, done)
 
 	wg := &sync.WaitGroup{}
 	wg.Add(numDigester)
@@ -68,6 +67,7 @@ func sum(root string, done <-chan struct{}) (<-chan result, <-chan error) {
 	}
 
 	go func() {
+		// We must ensure that no one writes to 'results' channel before closing it.
 		wg.Wait()
 		close(results)
 	}()
@@ -76,27 +76,41 @@ func sum(root string, done <-chan struct{}) (<-chan result, <-chan error) {
 }
 
 // Emits the paths for regular files in the tree.
-func walk(root string, done <-chan struct{}) (<-chan string, <-chan error) {
-	paths, errc := make(chan string), make(chan error, 1)
+func walk(roots []string, done <-chan struct{}) (<-chan string, <-chan error) {
+	paths, errc := make(chan string), make(chan error, len(roots))
 	go func() {
-		// No select needed for this send, since errc is buffered.
-		errc <- filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			if !info.Mode().IsRegular() {
-				return nil
-			}
-			select {
-			case paths <- path:
-			case <-done:
-				return errors.New("walk canceled")
-			}
-			return nil
-		})
+		wg := &sync.WaitGroup{}
+		wg.Add(len(roots))
 
-		// Close the paths channel after Walk returns.
-		close(paths)
+		for _, root := range roots {
+			go func(root string) {
+				// No select needed for this send, since errc is buffered.
+				errc <- filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+					if err != nil {
+						return err
+					}
+					if !info.Mode().IsRegular() {
+						return nil
+					}
+					select {
+					case paths <- path:
+					case <-done:
+						return errors.New("walk canceled")
+					}
+					return nil
+				})
+				wg.Done()
+			}(root)
+		}
+
+		go func() {
+			wg.Wait()
+
+			// Close the paths and errc channel after Walk returns. If we don't do this operation,
+			// 'digester' won't exit, then 'hashAll' won't exit too.
+			close(paths)
+			close(errc)
+		}()
 	}()
 	return paths, errc
 }
