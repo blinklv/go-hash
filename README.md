@@ -15,6 +15,12 @@ $ go install
 
 ## Usage
 
+**Format**
+
+```bash
+go-hash [algorithm|version|help] file [file...]
+```
+
 **Compute the digest of a single file**
 
 ```bash

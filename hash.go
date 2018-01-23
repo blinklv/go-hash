@@ -147,7 +147,7 @@ func exit(code int, msg string) {
 // Print usage information for helping people to use this command correctly.
 func usage(w io.Writer) {
 	msgs := []string{
-		"usage: hash [algorithm|version|help] file [file...]\n",
+		"usage: go-hash [algorithm|version|help] file [file...]\n",
 		"\n",
 		"       version   - print version information.\n",
 		"       help      - print usage.\n",
