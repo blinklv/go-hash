@@ -1,5 +1,9 @@
 # go-hash
 
+![Building](https://img.shields.io/badge/building-passing-green.svg)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Version](https://img.shields.io/badge/version-1.0.0-green.svg)
+
 **go-hash** is simple command tool to calculate the digest of files. It supports some mainstream algorithms, like [MD5][], [FNV][] family and [SHA][] family. 
 
 ## Install
@@ -80,6 +84,7 @@ c349d0741945ebafa8391f29d0981acab7858d08191d8daedb9d20187b946064  tests/visual/s
 1fd0bac6d1f9c7c8105290fb4e260eb4e35fcdd581128db9f090ce611715c0c6  transition.js
 ```
 
+Of course, you can also specify multiple directories at once.
 
 [MD5]: https://en.wikipedia.org/wiki/MD5
 [FNV]: https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
