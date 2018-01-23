@@ -29,26 +29,34 @@ import (
 	"syscall"
 )
 
-var (
-	h hash.Hash
+type hashFactory func() hash.Hash
 
-	hashMap = map[string]hash.Hash{
-		"md5":        md5.New(),
-		"sha1":       sha1.New(),
-		"sha224":     sha256.New224(),
-		"sha256":     sha256.New(),
-		"sha384":     sha512.New384(),
-		"sha512":     sha512.New(),
-		"sha512/224": sha512.New512_224(),
-		"sha512/256": sha512.New512_256(),
-		"fnv32":      fnv.New32(),
-		"fnv32a":     fnv.New32a(),
-		"fnv64":      fnv.New64(),
-		"fnv64a":     fnv.New64a(),
-		"fnv128":     fnv.New128(),
-		"fnv128a":    fnv.New128a(),
-	}
-)
+func wrapHash32Factory(hash32 func() hash.Hash32) hashFactory {
+	return func() hash.Hash { return hash32() }
+}
+
+func wrapHash64Factory(hash64 func() hash.Hash64) hashFactory {
+	return func() hash.Hash { return hash64() }
+}
+
+var factories = map[string]hashFactory{
+	"md5":        md5.New,
+	"sha1":       sha1.New,
+	"sha224":     sha256.New224,
+	"sha256":     sha256.New,
+	"sha384":     sha512.New384,
+	"sha512":     sha512.New,
+	"sha512/224": sha512.New512_224,
+	"sha512/256": sha512.New512_256,
+	"fnv32":      wrapHash32Factory(fnv.New32),
+	"fnv32a":     wrapHash32Factory(fnv.New32a),
+	"fnv64":      wrapHash64Factory(fnv.New64),
+	"fnv64a":     wrapHash64Factory(fnv.New64a),
+	"fnv128":     fnv.New128,
+	"fnv128a":    fnv.New128a,
+}
+
+var factory hashFactory
 
 func main() {
 	parseArg()
@@ -96,7 +104,7 @@ func parseArg() {
 		exit(1, "arguments are empty")
 	}
 
-	if h = hashMap[os.Args[1]]; h == nil {
+	if factory = factories[os.Args[1]]; factory == nil {
 		switch os.Args[1] {
 		case "version":
 			version()
@@ -250,7 +258,8 @@ func walk(roots []string, exit <-chan struct{}) (<-chan string, <-chan error) {
 func digester(paths <-chan string, results chan<- result, exit <-chan struct{}) {
 	for path := range paths {
 		data, err := ioutil.ReadFile(path)
-		h.Reset()
+
+		h := factory()
 		h.Write(data)
 
 		select {
