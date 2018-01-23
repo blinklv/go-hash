@@ -18,11 +18,15 @@ import (
 	"fmt"
 	"hash"
 	"hash/fnv"
+	"io"
 	"io/ioutil"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"sync"
+	"syscall"
 )
 
 var (
@@ -48,6 +52,41 @@ var (
 
 func main() {
 	parseArg()
+
+	var (
+		err        error
+		m          map[string][]byte
+		exit, done = make(chan struct{}), make(chan struct{})
+		sigch      = make(chan os.Signal, 8)
+	)
+
+	go func() {
+		m, err = hashAll(os.Args[2:], exit)
+		close(done)
+	}()
+
+	signal.Notify(sigch, syscall.SIGINT, syscall.SIGTERM)
+	select {
+	case <-sigch:
+		close(exit)
+		<-done
+	case <-done:
+	}
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %s!\n", err)
+		os.Exit(1)
+	}
+
+	paths := make([]string, 0, len(m))
+	for path := range m {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	for _, path := range paths {
+		fmt.Printf("%x  %s\n", m[path], path)
+	}
+
 	return
 }
 
@@ -77,15 +116,17 @@ func parseArg() {
 
 // Print error, usage information and exit the process.
 func exit(code int, msg string) {
+	w := os.Stdout
 	if code != 0 {
-		fmt.Printf("error: %s!\n\n", msg)
+		w = os.Stderr
+		fmt.Fprintf(w, "error: %s!\n\n", msg)
 	}
-	usage()
+	usage(w)
 	os.Exit(code)
 }
 
 // Print usage information for helping people to use this command correctly.
-func usage() {
+func usage(w io.Writer) {
 	msgs := []string{
 		"usage: hash [algorithm|version|help] file [file...]\n",
 		"\n",
@@ -102,7 +143,7 @@ func usage() {
 	}
 
 	for _, msg := range msgs {
-		fmt.Printf(msg)
+		fmt.Fprintf(w, msg)
 	}
 }
 
@@ -120,8 +161,8 @@ type result struct {
 	err  error
 }
 
-func hashAll(roots []string, done chan struct{}) (map[string][]byte, error) {
-	results, errc := sum(roots, done)
+func hashAll(roots []string, exit chan struct{}) (map[string][]byte, error) {
+	results, errc := sum(roots, exit)
 	m := make(map[string][]byte)
 	for r := range results {
 		if r.err != nil {
@@ -144,15 +185,15 @@ func hashAll(roots []string, done chan struct{}) (map[string][]byte, error) {
 // digest to reduce side effects for OS.
 const numDigester = 16
 
-func sum(roots []string, done <-chan struct{}) (<-chan result, <-chan error) {
+func sum(roots []string, exit <-chan struct{}) (<-chan result, <-chan error) {
 	results := make(chan result)
-	paths, errc := walk(roots, done)
+	paths, errc := walk(roots, exit)
 
 	wg := &sync.WaitGroup{}
 	wg.Add(numDigester)
 	for i := 0; i < numDigester; i++ {
 		go func() {
-			digester(paths, results, done)
+			digester(paths, results, exit)
 			wg.Done()
 		}()
 	}
@@ -167,7 +208,7 @@ func sum(roots []string, done <-chan struct{}) (<-chan result, <-chan error) {
 }
 
 // Emits the paths for regular files in the tree.
-func walk(roots []string, done <-chan struct{}) (<-chan string, <-chan error) {
+func walk(roots []string, exit <-chan struct{}) (<-chan string, <-chan error) {
 	paths, errc := make(chan string), make(chan error, len(roots))
 	go func() {
 		wg := &sync.WaitGroup{}
@@ -185,7 +226,7 @@ func walk(roots []string, done <-chan struct{}) (<-chan string, <-chan error) {
 					}
 					select {
 					case paths <- path:
-					case <-done:
+					case <-exit:
 						return errors.New("walk canceled")
 					}
 					return nil
@@ -206,12 +247,15 @@ func walk(roots []string, done <-chan struct{}) (<-chan string, <-chan error) {
 	return paths, errc
 }
 
-func digester(paths <-chan string, results chan<- result, done <-chan struct{}) {
+func digester(paths <-chan string, results chan<- result, exit <-chan struct{}) {
 	for path := range paths {
 		data, err := ioutil.ReadFile(path)
+		h.Reset()
+		h.Write(data)
+
 		select {
-		case results <- result{path, h.Sum(data), err}:
-		case <-done:
+		case results <- result{path, h.Sum(nil), err}:
+		case <-exit:
 			return
 		}
 	}
