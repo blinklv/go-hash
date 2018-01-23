@@ -5,7 +5,7 @@
 // Maintainer: blinklv <blinklv@icloud.com>
 // Last Change: 2018-01-23
 
-// A simple command tool to calculate the HASH value of files. It supports
+// A simple command tool to calculate the digest value of files. It supports
 // some mainstream HASH algorithms, like MD5, FNV family and SHA family.
 package main
 
