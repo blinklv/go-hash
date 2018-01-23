@@ -29,6 +29,52 @@ import (
 	"syscall"
 )
 
+func main() {
+	parseArg()
+
+	var (
+		err        error
+		m          map[string][]byte
+		exit, done = make(chan struct{}), make(chan struct{})
+		sigch      = make(chan os.Signal, 8)
+	)
+
+	go func() {
+		m, err = hashAll(os.Args[2:], exit)
+		close(done)
+	}()
+
+	// There're two cases will cause the process exit. The first case
+	// is trival, computing digests of all files has done. The second
+	// case is triggered by some OS signals, it will make the process
+	// exits ahead of time.
+	signal.Notify(sigch, syscall.SIGINT, syscall.SIGTERM)
+	select {
+	case <-sigch:
+		close(exit)
+		// It will check the value of 'err' variable, so we need to
+		// wait for 'hasAll' function has done.
+		<-done
+	case <-done:
+	}
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %s!\n", err)
+		os.Exit(1)
+	}
+
+	paths := make([]string, 0, len(m))
+	for path := range m {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	for _, path := range paths {
+		fmt.Printf("%x  %s\n", m[path], path)
+	}
+
+	return
+}
+
 type hashFactory func() hash.Hash
 
 func wrapHash32Factory(hash32 func() hash.Hash32) hashFactory {
@@ -56,47 +102,12 @@ var factories = map[string]hashFactory{
 	"fnv128a":    fnv.New128a,
 }
 
+// When we call the digester function, we create a new hash.Hash instance to compute
+// the digest of a file. Why don't we use the only one global hash.Hash instance?
+// Because some hash.Hash implementations are not concurrent safe. If there're multiple
+// digester goroutines use a global hash.Hash instance simultaneously, some exceptions
+// maybe happen.
 var factory hashFactory
-
-func main() {
-	parseArg()
-
-	var (
-		err        error
-		m          map[string][]byte
-		exit, done = make(chan struct{}), make(chan struct{})
-		sigch      = make(chan os.Signal, 8)
-	)
-
-	go func() {
-		m, err = hashAll(os.Args[2:], exit)
-		close(done)
-	}()
-
-	signal.Notify(sigch, syscall.SIGINT, syscall.SIGTERM)
-	select {
-	case <-sigch:
-		close(exit)
-		<-done
-	case <-done:
-	}
-
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %s!\n", err)
-		os.Exit(1)
-	}
-
-	paths := make([]string, 0, len(m))
-	for path := range m {
-		paths = append(paths, path)
-	}
-	sort.Strings(paths)
-	for _, path := range paths {
-		fmt.Printf("%x  %s\n", m[path], path)
-	}
-
-	return
-}
 
 // Parse the command arguments.
 func parseArg() {
@@ -256,10 +267,13 @@ func walk(roots []string, exit <-chan struct{}) (<-chan string, <-chan error) {
 }
 
 func digester(paths <-chan string, results chan<- result, exit <-chan struct{}) {
+	// Some hash.Hash implementations are not concurrent safe, so we need to
+	// create a new instance for a single digester goroutine.
+	h := factory()
+
 	for path := range paths {
 		data, err := ioutil.ReadFile(path)
-
-		h := factory()
+		h.Reset() // Don't forget this operation.
 		h.Write(data)
 
 		select {
