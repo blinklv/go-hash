@@ -170,7 +170,7 @@ const binary = "1.0.0"
 
 // Print version information and exit the process.
 func version() {
-	fmt.Printf("%s v%s (built w/%s)\n", "hash", binary, runtime.Version())
+	fmt.Printf("%s v%s (built w/%s)\n", "go-hash", binary, runtime.Version())
 	os.Exit(0)
 }
 
