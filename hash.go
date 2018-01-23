@@ -3,7 +3,7 @@
 // Author: blinklv <blinklv@icloud.com>
 // Create Time: 2018-01-17
 // Maintainer: blinklv <blinklv@icloud.com>
-// Last Change: 2018-01-22
+// Last Change: 2018-01-23
 
 // A simple command tool to calculate the HASH value of files. It supports
 // some mainstream HASH algorithms, like MD5, FNV family and SHA family.
@@ -15,11 +15,13 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"errors"
+	"fmt"
 	"hash"
 	"hash/fnv"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 )
 
@@ -45,7 +47,71 @@ var (
 )
 
 func main() {
+	parseArg()
 	return
+}
+
+// Parse the command arguments.
+func parseArg() {
+	if len(os.Args) == 1 {
+		exit(1, "arguments are empty")
+	}
+
+	if h = hashMap[os.Args[1]]; h == nil {
+		switch os.Args[1] {
+		case "version":
+			version()
+		case "help":
+			exit(0, "")
+		default:
+			exit(1, fmt.Sprintf("invalid option (%s)", os.Args[1]))
+		}
+	} else if len(os.Args) == 2 {
+		// There must exist one file at least when the first argument
+		// is the name of a hash algorithm.
+		exit(1, "file arguments are empty")
+	}
+
+	return
+}
+
+// Print error, usage information and exit the process.
+func exit(code int, msg string) {
+	if code != 0 {
+		fmt.Printf("error: %s!\n\n", msg)
+	}
+	usage()
+	os.Exit(code)
+}
+
+// Print usage information for helping people to use this command correctly.
+func usage() {
+	msgs := []string{
+		"usage: hash [algorithm|version|help] file [file...]\n",
+		"\n",
+		"       version   - print version information.\n",
+		"       help      - print usage.\n",
+		"       algorithm - the hash algorithm for computing the digest of files.\n",
+		"                   Its values can be one in the following list:\n",
+		"\n",
+		"                   md5, sha1, sha224, sha256, sha384, sha512, sha512/224\n",
+		"                   sha512/256, fnv32, fnv32a, fnv64, fnv64a, fnv128, fnv128a\n",
+		"\n",
+		"       file      - the objective file of the hash algorithm. If its type is directory,\n",
+		"                   computing digest of all files in this directory recursively.\n",
+	}
+
+	for _, msg := range msgs {
+		fmt.Printf(msg)
+	}
+}
+
+const binary = "1.0.0"
+
+// Print version information and exit the process.
+func version() {
+	fmt.Printf("%s v%s (built w/%s)\n", "hash", binary, runtime.Version())
+	os.Exit(0)
 }
 
 type result struct {
