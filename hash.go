@@ -158,7 +158,7 @@ func usage(w io.Writer) {
 		"                   sha512/256, fnv32, fnv32a, fnv64, fnv64a, fnv128, fnv128a\n",
 		"\n",
 		"       file      - the objective file of the hash algorithm. If its type is directory,\n",
-		"                   computing digest of all files in this directory recursively.\n",
+		"                   computing digests of all files in this directory recursively.\n",
 	}
 
 	for _, msg := range msgs {
