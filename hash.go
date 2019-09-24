@@ -3,10 +3,10 @@
 // Author: blinklv <blinklv@icloud.com>
 // Create Time: 2018-01-17
 // Maintainer: blinklv <blinklv@icloud.com>
-// Last Change: 2018-01-23
+// Last Change: 2019-09-24
 
 // A simple command tool to calculate the digest value of files. It supports
-// some mainstream HASH algorithms, like MD5, FNV family and SHA family.
+// some primary HASH algorithms, like MD5, FNV family, and SHA family.
 package main
 
 import (
@@ -28,6 +28,43 @@ import (
 	"sync"
 	"syscall"
 )
+
+// factory specifices how to create a hash.Hash instance.
+type factory func() hash.Hash
+
+// factory32 specifies how to create a hash.Hash32 instance.
+type factory32 func() hash.Hash32
+
+// Converts a factory32 instance to the corresponded factory instance.
+func (f32 factory32) normalize() factory {
+	return func() hash.Hash { return f32() }
+}
+
+// factory64 specifies how to create a hash.Hasn64 instance.
+type factory64 func() hash.Hash64
+
+// Converts a factory64 instance to the corresponded factory instance.
+func (f64 factory64) normalize() factory {
+	return func() hash.Hash { return f64() }
+}
+
+// factories variable specifies all HASH algorithms supported by this tool.
+var factories = map[string]factory{
+	"md5":        md5.New,
+	"sha1":       sha1.New,
+	"sha224":     sha256.New224,
+	"sha256":     sha256.New,
+	"sha384":     sha512.New384,
+	"sha512":     sha512.New,
+	"sha512/224": sha512.New512_224,
+	"sha512/256": sha512.New512_256,
+	"fnv32":      (factory32(fnv.New32)).normalize(),
+	"fnv32a":     (factory32(fnv.New32a)).normalize(),
+	"fnv64":      (factory64(fnv.New64)).normalize(),
+	"fnv64a":     (factory64(fnv.New64a)).normalize(),
+	"fnv128":     fnv.New128,
+	"fnv128a":    fnv.New128a,
+}
 
 func main() {
 	parseArg()
@@ -75,39 +112,12 @@ func main() {
 	return
 }
 
-type hashFactory func() hash.Hash
-
-func wrapHash32Factory(hash32 func() hash.Hash32) hashFactory {
-	return func() hash.Hash { return hash32() }
-}
-
-func wrapHash64Factory(hash64 func() hash.Hash64) hashFactory {
-	return func() hash.Hash { return hash64() }
-}
-
-var factories = map[string]hashFactory{
-	"md5":        md5.New,
-	"sha1":       sha1.New,
-	"sha224":     sha256.New224,
-	"sha256":     sha256.New,
-	"sha384":     sha512.New384,
-	"sha512":     sha512.New,
-	"sha512/224": sha512.New512_224,
-	"sha512/256": sha512.New512_256,
-	"fnv32":      wrapHash32Factory(fnv.New32),
-	"fnv32a":     wrapHash32Factory(fnv.New32a),
-	"fnv64":      wrapHash64Factory(fnv.New64),
-	"fnv64a":     wrapHash64Factory(fnv.New64a),
-	"fnv128":     fnv.New128,
-	"fnv128a":    fnv.New128a,
-}
-
 // When we call the digester function, we create a new hash.Hash instance to compute
 // the digest of a file. Why don't we use the only one global hash.Hash instance?
 // Because some hash.Hash implementations are not concurrent safe. If there're multiple
 // digester goroutines use a global hash.Hash instance simultaneously, some exceptions
 // maybe happen.
-var factory hashFactory
+var creator factory
 
 // Parse the command arguments.
 func parseArg() {
@@ -115,7 +125,7 @@ func parseArg() {
 		exit(1, "arguments are empty")
 	}
 
-	if factory = factories[os.Args[1]]; factory == nil {
+	if creator = factories[os.Args[1]]; creator == nil {
 		switch os.Args[1] {
 		case "version":
 			version()
@@ -269,7 +279,7 @@ func walk(roots []string, exit <-chan struct{}) (<-chan string, <-chan error) {
 func digester(paths <-chan string, results chan<- result, exit <-chan struct{}) {
 	// Some hash.Hash implementations are not concurrent safe, so we need to
 	// create a new instance for a single digester goroutine.
-	h := factory()
+	h := creator()
 
 	for path := range paths {
 		data, err := ioutil.ReadFile(path)
