@@ -1,7 +1,7 @@
 // hash.go
 //
 // Author: blinklv <blinklv@icloud.com>
-// Create Time: 2018-01-17
+// Create Time: 2019-10-23
 // Maintainer: blinklv <blinklv@icloud.com>
 // Last Change: 2019-10-23
 
@@ -14,117 +14,29 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
-	"errors"
 	"flag"
 	"fmt"
 	"hash"
 	"hash/fnv"
 	"io"
-	"io/ioutil"
 	"os"
-	"os/signal"
-	"path/filepath"
 	"runtime"
-	"sort"
-	"sync"
-	"syscall"
 )
 
+// App binary version.
+const binary = "1.0.0"
+
 var (
+	_algo     = flag.String("algo", "md5", "")
 	_filename = flag.Bool("filename", true, "")
 	_depth    = flag.Int("depth", 1, "")
 	_version  = flag.Bool("version", false, "")
 	_help     = flag.Bool("help", false, "")
 )
 
-func parseArg() {
-	flag.Parse()
-	if *_version {
-		version()
-	} else if *_help {
-		exit(0, "")
-	} else {
-	}
-}
-
-// Print version information and exit the process.
-func version() {
-	fmt.Printf("%s v%s (built w/%s)\n", "go-hash", binary, runtime.Version())
-	os.Exit(0)
-}
-
-// Output usage information.
-func usage(w io.Writer) {
-	msgs := []string{
-		"usage: go-hash [option] algorithm file...\n",
-		"\n",
-		"       algorithm - the hash algorithm for computing the digest of files.\n",
-		"                   Its values can be one in the following list (default: md5)\n",
-		"\n",
-		"                   md5, sha1, sha224, sha256, sha384, sha512, sha512/224\n",
-		"                   sha512/256, fnv32, fnv32a, fnv64, fnv64a, fnv128, fnv128a\n",
-		"\n",
-		"       file      - the objective file of the hash algorithm. If its type is directory,\n",
-		"                   computing digests of all files in this directory recursively.\n",
-		"\n",
-		"       -filename - control whether to display the corresponded filenames when outputing\n",
-		"                   the digest of files. (default: true)\n",
-		"\n",
-		"       -depth    - control the recursive depth of searching directories. (default: 1)\n",
-		"\n",
-		"       -version  - control whether to display version information. (default: false)\n",
-		"\n",
-		"       -help     - control whether to display usage information. (defualt: false)\n",
-		"\n",
-	}
-	for _, msg := range msgs {
-		fmt.Fprintf(w, msg)
-	}
-}
-
 func main() {
-	parseArg()
-
-	var (
-		err        error
-		m          map[string][]byte
-		exit, done = make(chan struct{}), make(chan struct{})
-		sigch      = make(chan os.Signal, 8)
-	)
-
-	go func() {
-		m, err = hashAll(os.Args[2:], exit)
-		close(done)
-	}()
-
-	// There're two cases will cause the process exit. The first case
-	// is trival, computing digests of all files has done. The second
-	// case is triggered by some OS signals, it will make the process
-	// exits ahead of time.
-	signal.Notify(sigch, syscall.SIGINT, syscall.SIGTERM)
-	select {
-	case <-sigch:
-		close(exit)
-		// It will check the value of 'err' variable, so we need to
-		// wait for 'hasAll' function has done.
-		<-done
-	case <-done:
-	}
-
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %s!\n", err)
-		os.Exit(1)
-	}
-
-	paths := make([]string, 0, len(m))
-	for path := range m {
-		paths = append(paths, path)
-	}
-	sort.Strings(paths)
-	for _, path := range paths {
-		fmt.Printf("%x  %s\n", m[path], path)
-	}
-
+	parse_arg()
+	fprintf(stdout, "%v", files)
 	return
 }
 
@@ -135,162 +47,77 @@ func main() {
 // maybe happen.
 var creator factory
 
+var files []string
+
 // Parse the command arguments.
-func parseArg() {
-	if len(os.Args) == 1 {
-		exit(1, "arguments are empty")
+func parse_arg() {
+	flag.Usage = func() { usage(stderr) } // overwrite the default usage.
+	flag.Parse()
+
+	if *_version {
+		version(stdout)
+		exit(nil)
 	}
 
-	if creator = factories[os.Args[1]]; creator == nil {
-		switch os.Args[1] {
-		case "version":
-			version()
-		case "help":
-			exit(0, "")
-		default:
-			exit(1, fmt.Sprintf("invalid option (%s)", os.Args[1]))
-		}
-	} else if len(os.Args) == 2 {
-		// There must exist one file at least when the first argument
-		// is the name of a hash algorithm.
-		exit(1, "file arguments are empty")
+	if *_help {
+		usage(stdout)
+		exit(nil)
+	}
+
+	if creator = factories[*_algo]; creator == nil {
+		exit(errorf("unknown hash algorithm '%s'", *_algo))
+	}
+
+	if files = flag.Args(); len(files) == 0 {
+		exit(errorf("there is no file"))
 	}
 
 	return
 }
 
-// Print error, usage information and exit the process.
-func exit(code int, msg string) {
-	w := os.Stdout
-	if code != 0 {
-		w = os.Stderr
-		fmt.Fprintf(w, "error: %s!\n\n", msg)
-	}
-	usage(w)
-	os.Exit(code)
-}
-
-const binary = "1.0.0"
-
-// Print version information and exit the process.
-func version() {
-	fmt.Printf("%s v%s (built w/%s)\n", "go-hash", binary, runtime.Version())
-	os.Exit(0)
-}
-
-type result struct {
-	path string
-	sum  []byte
-	err  error
-}
-
-func hashAll(roots []string, exit chan struct{}) (map[string][]byte, error) {
-	results, errc := sum(roots, exit)
-	m := make(map[string][]byte)
-	for r := range results {
-		if r.err != nil {
-			return nil, r.err
-		}
-		m[r.path] = r.sum
-	}
-
-	for err := range errc {
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return m, nil
-}
-
-// If we allocate a goroutine for each path immediately, it will cost resources heavy
-// when there're so many big files. So we should limit the number of goroutines computing
-// digest to reduce side effects for OS.
-const numDigester = 16
-
-func sum(roots []string, exit <-chan struct{}) (<-chan result, <-chan error) {
-	results := make(chan result)
-	paths, errc := walk(roots, exit)
-
-	wg := &sync.WaitGroup{}
-	wg.Add(numDigester)
-	for i := 0; i < numDigester; i++ {
-		go func() {
-			digester(paths, results, exit)
-			wg.Done()
-		}()
-	}
-
-	go func() {
-		// We must ensure that no one writes to 'results' channel before closing it.
-		wg.Wait()
-		close(results)
-	}()
-
-	return results, errc
-}
-
-// Emits the paths for regular files in the tree.
-func walk(roots []string, exit <-chan struct{}) (<-chan string, <-chan error) {
-	paths, errc := make(chan string), make(chan error, len(roots))
-	go func() {
-		wg := &sync.WaitGroup{}
-		wg.Add(len(roots))
-
-		for _, root := range roots {
-			go func(root string) {
-				// No select needed for this send, since errc is buffered.
-				errc <- filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-					if err != nil {
-						return err
-					}
-					if !info.Mode().IsRegular() {
-						return nil
-					}
-					select {
-					case paths <- path:
-					case <-exit:
-						return errors.New("walk canceled")
-					}
-					return nil
-				})
-				wg.Done()
-			}(root)
-		}
-
-		go func() {
-			wg.Wait()
-
-			// Close the paths and errc channel after Walk returns. If we don't do this operation,
-			// 'digester' won't exit, then 'hashAll' won't exit too.
-			close(paths)
-			close(errc)
-		}()
-	}()
-	return paths, errc
-}
-
-func digester(paths <-chan string, results chan<- result, exit <-chan struct{}) {
-	// Some hash.Hash implementations are not concurrent safe, so we need to
-	// create a new instance for a single digester goroutine.
-	h := creator()
-
-	for path := range paths {
-		data, err := ioutil.ReadFile(path)
-		h.Reset() // Don't forget this operation.
-		h.Write(data)
-
-		select {
-		case results <- result{path, h.Sum(nil), err}:
-		case <-exit:
-			return
-		}
-	}
-}
-
 // Output version information.
 func version(w io.Writer) {
-	fprintf(stdout, "%s v%s (built w/%s)\n", "go-hash", binary, runtime.Version())
+	fprintf(w, "%s v%s (built w/%s)\n", "go-hash", binary, runtime.Version())
+}
+
+// Output usage information.
+func usage(w io.Writer) {
+	msgs := []string{
+		"usage: go-hash [option] file...\n",
+		"\n",
+		"       -algo     - the hash algorithm for computing the digest of files. (default: md5)\n",
+		"                   Its values can be one in the following list:\n",
+		"\n",
+		"                   md5, sha1, sha224, sha256, sha384, sha512, sha512/224\n",
+		"                   sha512/256, fnv32, fnv32a, fnv64, fnv64a, fnv128, fnv128a\n",
+		"\n",
+		"       -filename - control whether to display the corresponded filenames when outputing\n",
+		"                   the digest of files. (default: true)\n",
+		"\n",
+		"       -depth    - control the recursive depth of searching directories. (default: 1)\n",
+		"\n",
+		"       -version  - control whether to display version information. (default: false)\n",
+		"\n",
+		"       -help     - control whether to display usage information. (defualt: false)\n",
+		"\n",
+		"       file      - the objective file of the hash algorithm. If its type is directory,\n",
+		"                   computing digests of all files in this directory recursively.\n",
+		"\n",
+	}
+	for _, msg := range msgs {
+		fprintf(w, msg)
+	}
+}
+
+// Exit the process. If the 'e' parameter is not nil, print the error
+// message and display usage information.
+func exit(e error) {
+	if e != nil {
+		fprintf(stderr, "ERROR: %s\n", e)
+		usage(stderr)
+		os.Exit(1)
+	}
+	os.Exit(0)
 }
 
 // Rename some functions and objects to simplify my codes.
