@@ -3,10 +3,10 @@
 // Author: blinklv <blinklv@icloud.com>
 // Create Time: 2018-01-17
 // Maintainer: blinklv <blinklv@icloud.com>
-// Last Change: 2019-09-24
+// Last Change: 2019-10-23
 
-// A simple command tool to calculate the digest value of files. It supports
-// some primary HASH algorithms, like MD5, FNV family, and SHA family.
+// A simple command tool to calculate the digest value of files. It supports some
+// primary Message-Digest Hash algorithms, like MD5, FNV family, and SHA family.
 package main
 
 import (
@@ -15,6 +15,7 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"errors"
+	"flag"
 	"fmt"
 	"hash"
 	"hash/fnv"
@@ -29,41 +30,56 @@ import (
 	"syscall"
 )
 
-// factory specifices how to create a hash.Hash instance.
-type factory func() hash.Hash
+var (
+	_filename = flag.Bool("filename", true, "")
+	_depth    = flag.Int("depth", 1, "")
+	_version  = flag.Bool("version", false, "")
+	_help     = flag.Bool("help", false, "")
+)
 
-// factory32 specifies how to create a hash.Hash32 instance.
-type factory32 func() hash.Hash32
-
-// Converts a factory32 instance to the corresponded factory instance.
-func (f32 factory32) normalize() factory {
-	return func() hash.Hash { return f32() }
+func parseArg() {
+	flag.Parse()
+	if *_version {
+		version()
+	} else if *_help {
+		exit(0, "")
+	} else {
+	}
 }
 
-// factory64 specifies how to create a hash.Hasn64 instance.
-type factory64 func() hash.Hash64
-
-// Converts a factory64 instance to the corresponded factory instance.
-func (f64 factory64) normalize() factory {
-	return func() hash.Hash { return f64() }
+// Print version information and exit the process.
+func version() {
+	fmt.Printf("%s v%s (built w/%s)\n", "go-hash", binary, runtime.Version())
+	os.Exit(0)
 }
 
-// factories variable specifies all HASH algorithms supported by this tool.
-var factories = map[string]factory{
-	"md5":        md5.New,
-	"sha1":       sha1.New,
-	"sha224":     sha256.New224,
-	"sha256":     sha256.New,
-	"sha384":     sha512.New384,
-	"sha512":     sha512.New,
-	"sha512/224": sha512.New512_224,
-	"sha512/256": sha512.New512_256,
-	"fnv32":      (factory32(fnv.New32)).normalize(),
-	"fnv32a":     (factory32(fnv.New32a)).normalize(),
-	"fnv64":      (factory64(fnv.New64)).normalize(),
-	"fnv64a":     (factory64(fnv.New64a)).normalize(),
-	"fnv128":     fnv.New128,
-	"fnv128a":    fnv.New128a,
+// Output usage information.
+func usage(w io.Writer) {
+	msgs := []string{
+		"usage: go-hash [option] algorithm file...\n",
+		"\n",
+		"       algorithm - the hash algorithm for computing the digest of files.\n",
+		"                   Its values can be one in the following list (default: md5)\n",
+		"\n",
+		"                   md5, sha1, sha224, sha256, sha384, sha512, sha512/224\n",
+		"                   sha512/256, fnv32, fnv32a, fnv64, fnv64a, fnv128, fnv128a\n",
+		"\n",
+		"       file      - the objective file of the hash algorithm. If its type is directory,\n",
+		"                   computing digests of all files in this directory recursively.\n",
+		"\n",
+		"       -filename - control whether to display the corresponded filenames when outputing\n",
+		"                   the digest of files. (default: true)\n",
+		"\n",
+		"       -depth    - control the recursive depth of searching directories. (default: 1)\n",
+		"\n",
+		"       -version  - control whether to display version information. (default: false)\n",
+		"\n",
+		"       -help     - control whether to display usage information. (defualt: false)\n",
+		"\n",
+	}
+	for _, msg := range msgs {
+		fmt.Fprintf(w, msg)
+	}
 }
 
 func main() {
@@ -152,28 +168,6 @@ func exit(code int, msg string) {
 	}
 	usage(w)
 	os.Exit(code)
-}
-
-// Print usage information for helping people to use this command correctly.
-func usage(w io.Writer) {
-	msgs := []string{
-		"usage: go-hash [algorithm|version|help] file [file...]\n",
-		"\n",
-		"       version   - print version information.\n",
-		"       help      - print usage.\n",
-		"       algorithm - the hash algorithm for computing the digest of files.\n",
-		"                   Its values can be one in the following list:\n",
-		"\n",
-		"                   md5, sha1, sha224, sha256, sha384, sha512, sha512/224\n",
-		"                   sha512/256, fnv32, fnv32a, fnv64, fnv64a, fnv128, fnv128a\n",
-		"\n",
-		"       file      - the objective file of the hash algorithm. If its type is directory,\n",
-		"                   computing digests of all files in this directory recursively.\n",
-	}
-
-	for _, msg := range msgs {
-		fmt.Fprintf(w, msg)
-	}
 }
 
 const binary = "1.0.0"
@@ -292,4 +286,55 @@ func digester(paths <-chan string, results chan<- result, exit <-chan struct{}) 
 			return
 		}
 	}
+}
+
+// Output version information.
+func version(w io.Writer) {
+	fprintf(stdout, "%s v%s (built w/%s)\n", "go-hash", binary, runtime.Version())
+}
+
+// Rename some functions and objects to simplify my codes.
+var (
+	sprintf = fmt.Sprintf
+	errorf  = fmt.Errorf
+	fprintf = fmt.Fprintf
+	stdout  = os.Stdout
+	stderr  = os.Stderr
+)
+
+// factory specifices how to create a hash.Hash instance.
+type factory func() hash.Hash
+
+// factory32 specifies how to create a hash.Hash32 instance.
+type factory32 func() hash.Hash32
+
+// Converts a factory32 instance to the corresponded factory instance.
+func (f32 factory32) normalize() factory {
+	return func() hash.Hash { return f32() }
+}
+
+// factory64 specifies how to create a hash.Hasn64 instance.
+type factory64 func() hash.Hash64
+
+// Converts a factory64 instance to the corresponded factory instance.
+func (f64 factory64) normalize() factory {
+	return func() hash.Hash { return f64() }
+}
+
+// factories variable specifies all HASH algorithms supported by this tool.
+var factories = map[string]factory{
+	"md5":        md5.New,
+	"sha1":       sha1.New,
+	"sha224":     sha256.New224,
+	"sha256":     sha256.New,
+	"sha384":     sha512.New384,
+	"sha512":     sha512.New,
+	"sha512/224": sha512.New512_224,
+	"sha512/256": sha512.New512_256,
+	"fnv32":      (factory32(fnv.New32)).normalize(),
+	"fnv32a":     (factory32(fnv.New32a)).normalize(),
+	"fnv64":      (factory64(fnv.New64)).normalize(),
+	"fnv64a":     (factory64(fnv.New64a)).normalize(),
+	"fnv128":     fnv.New128,
+	"fnv128a":    fnv.New128a,
 }
