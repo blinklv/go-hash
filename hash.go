@@ -20,7 +20,9 @@ import (
 	"hash/fnv"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime"
+	"sort"
 )
 
 const binary = "1.0.0" // App binary version.
@@ -83,8 +85,6 @@ func (f64 factory64) normalize() factory {
 	return func() hash.Hash { return f64() }
 }
 
-type trigger chan struct{}
-
 // Rename some functions and objects to simplify my codes.
 var (
 	sprintf = fmt.Sprintf
@@ -92,12 +92,11 @@ var (
 	fprintf = fmt.Fprintf
 	stdout  = os.Stdout
 	stderr  = os.Stderr
+	join    = filepath.Join
 )
 
-var roots []string // Root files to be processed.
-
-// Parse the command arguments.
-func parse_arg() {
+// Parse the command arguments and return root files.
+func parse_arg() []string {
 	flag.Usage = func() { usage(stderr) } // overwrite the default usage.
 	flag.Parse()
 
@@ -115,11 +114,99 @@ func parse_arg() {
 		exit(errorf("unknown hash algorithm '%s'", *_algo))
 	}
 
+	var roots []string // Root files to be processed.
 	if roots = flag.Args(); len(roots) == 0 {
 		exit(errorf("no input file specified"))
 	}
+	return roots
+}
 
-	return
+// If we allocate a goroutine for each path immediately, it will cost resources heavy
+// when there're so many big files. So we should limit the number of goroutines computing
+// digest to reduce side effects for OS.
+const numDigester = 16
+
+type trigger chan struct{}
+
+// Traverse a directory tree in preorder.
+func walk(exit trigger, roots []string) chan *node {
+	nodes := make(chan *node, numDigester)
+	go func() {
+		// Initialize the node stack.
+		rsort(roots)
+		S := make([]*node, 0, len(roots))
+		for _, root := range roots {
+			S = append(S, (&node{}).initialize(root))
+		}
+
+		// Iterate the node stack.
+		var top *node
+		for i := 0; len(S) > 0 && S[len(S)-1].depth <= *_depth; i++ {
+			top, S = S[len(S)-1], S[:len(S)-1] // Pop the top node.
+			if top.err == nil {
+				if children := top.children(); len(children) > 0 {
+					S = append(S, children...)
+				}
+			}
+			nodes <- top.mark(i)
+		}
+	}()
+	return nodes
+}
+
+// Directory tree node.
+type node struct {
+	os.FileInfo
+	path  string // Filepath
+	i     int    // Walk sequence
+	depth int    // Directory depth
+	sum   []byte // Digest
+	err   error
+}
+
+// Initialize a node by using its path and return itself. If there
+// exists any problem, it will store the error to the 'err' field.
+func (n *node) initialize(path string) *node {
+	n.path = path
+	n.FileInfo, n.err = os.Lstat(path)
+	return n
+}
+
+// Using 'walk sequence' to mark a node has been traversed.
+func (n *node) mark(i int) *node {
+	n.i = i
+	return n
+}
+
+// Return children node of a directory node. If there is something wrong,
+// it will store the error to the 'err' field.
+func (n *node) children() []*node {
+	if n.IsDir() {
+		var (
+			f     *os.File
+			names []string
+		)
+
+		f, n.err = os.Open(n.path)
+		if n.err != nil {
+			return nil
+		}
+
+		names, n.err = f.Readdirnames(-1)
+		f.Close()
+		if n.err != nil {
+			return nil
+		}
+
+		rsort(names)
+		children := make([]*node, 0, len(names))
+		for _, name := range names {
+			children = append(children, (&node{
+				depth: n.depth + 1,
+			}).initialize(join(n.path, name)))
+		}
+	}
+	return nil
 }
 
 // Output usage information.
@@ -167,4 +254,9 @@ func exit(e error) {
 		os.Exit(1)
 	}
 	os.Exit(0)
+}
+
+// rsort (Reverse Sort) sorts a slice of strings in decreasing order.
+func rsort(strs []string) {
+	sort.Sort(sort.Reverse(sort.StringSlice(strs)))
 }
