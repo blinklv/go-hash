@@ -25,21 +25,14 @@ import (
 	"sort"
 )
 
+/* Global Constants and Variables */
+
 const binary = "1.0.0" // App binary version.
 
-var (
-	_algo     = flag.String("algo", "md5", "")
-	_filename = flag.Bool("filename", true, "")
-	_depth    = flag.Int("depth", 1, "")
-	_all      = flag.Bool("all", false, "")
-	_version  = flag.Bool("version", false, "")
-	_help     = flag.Bool("help", false, "")
-)
-
-func main() {
-	parse_arg()
-	return
-}
+// If we allocate a goroutine for each path immediately, it will cost resources heavy
+// when there're so many big files. So we should limit the number of goroutines computing
+// digest to reduce side effects for OS.
+const numDigester = 16
 
 // When we call the digester function, we create a new hash.Hash instance to compute
 // the digest of a file. Why don't we use the only one global hash.Hash instance?
@@ -66,38 +59,52 @@ var factories = map[string]factory{
 	"fnv128a":    fnv.New128a,
 }
 
-// factory specifices how to create a hash.Hash instance.
-type factory func() hash.Hash
-
-// factory32 specifies how to create a hash.Hash32 instance.
-type factory32 func() hash.Hash32
-
-// Converts a factory32 instance to the corresponded factory instance.
-func (f32 factory32) normalize() factory {
-	return func() hash.Hash { return f32() }
+// Help document.
+var usages = []string{
+	"usage: go-hash [option] file...\n",
+	"\n",
+	"       -algo     - the hash algorithm for computing the digest of files. (default: md5)\n",
+	"                   Its values can be one in the following list:\n",
+	"\n",
+	"                   md5, sha1, sha224, sha256, sha384, sha512, sha512/224\n",
+	"                   sha512/256, fnv32, fnv32a, fnv64, fnv64a, fnv128, fnv128a\n",
+	"\n",
+	"       -filename - control whether to display the corresponded filenames when outputing\n",
+	"                   the digest of files. (default: true)\n",
+	"\n",
+	"       -depth    - control the recursive depth of searching directories. (default: 1)\n",
+	"\n",
+	"       -all      - control whether process hidden files. (default: false)\n",
+	"\n",
+	"       -version  - control whether to display version information. (default: false)\n",
+	"\n",
+	"       -help     - control whether to display usage information. (defualt: false)\n",
+	"\n",
+	"       file      - the objective file of the hash algorithm. If its type is directory,\n",
+	"                   computing digests of all files in this directory recursively.\n",
+	"\n",
 }
 
-// factory64 specifies how to create a hash.Hasn64 instance.
-type factory64 func() hash.Hash64
-
-// Converts a factory64 instance to the corresponded factory instance.
-func (f64 factory64) normalize() factory {
-	return func() hash.Hash { return f64() }
-}
-
-// Rename some functions and objects to simplify my codes.
+// Command-Line options.
 var (
-	sprintf = fmt.Sprintf
-	errorf  = fmt.Errorf
-	fprintf = fmt.Fprintf
-	stdout  = os.Stdout
-	stderr  = os.Stderr
-	join    = filepath.Join
+	_algo     = flag.String("algo", "md5", "")
+	_filename = flag.Bool("filename", true, "")
+	_depth    = flag.Int("depth", 1, "")
+	_all      = flag.Bool("all", false, "")
+	_version  = flag.Bool("version", false, "")
+	_help     = flag.Bool("help", false, "")
 )
+
+/* Main Functions */
+
+func main() {
+	parse_arg()
+	return
+}
 
 // Parse the command arguments and return root files.
 func parse_arg() []string {
-	flag.Usage = func() { usage(stderr) } // overwrite the default usage.
+	flag.Usage = func() { help(stderr) } // overwrite the default usage.
 	flag.Parse()
 
 	if *_version {
@@ -106,7 +113,7 @@ func parse_arg() []string {
 	}
 
 	if *_help {
-		usage(stdout)
+		help(stdout)
 		exit(nil)
 	}
 
@@ -120,13 +127,6 @@ func parse_arg() []string {
 	}
 	return roots
 }
-
-// If we allocate a goroutine for each path immediately, it will cost resources heavy
-// when there're so many big files. So we should limit the number of goroutines computing
-// digest to reduce side effects for OS.
-const numDigester = 16
-
-type trigger chan struct{}
 
 // Traverse a directory tree in preorder.
 func walk(exit trigger, roots []string) chan *node {
@@ -153,6 +153,33 @@ func walk(exit trigger, roots []string) chan *node {
 	}()
 	return nodes
 }
+
+// Output version information.
+func version(w io.Writer) {
+	fprintf(w, "%s v%s (built w/%s)\n", "go-hash", binary, runtime.Version())
+}
+
+// Exit the process. If the 'e' parameter is not nil, print the error
+// message and display usage information.
+func exit(e error) {
+	if e != nil {
+		fprintf(stderr, "ERROR: %s\n", e)
+		help(stderr)
+		os.Exit(1)
+	}
+	os.Exit(0)
+}
+
+// Output usage information.
+func help(w io.Writer) {
+	for _, usage := range usages {
+		fprintf(w, usage)
+	}
+}
+
+/* Auxiliary Structs and Methods */
+
+type trigger chan struct{}
 
 // Directory tree node.
 type node struct {
@@ -209,54 +236,38 @@ func (n *node) children() []*node {
 	return nil
 }
 
-// Output usage information.
-func usage(w io.Writer) {
-	msgs := []string{
-		"usage: go-hash [option] file...\n",
-		"\n",
-		"       -algo     - the hash algorithm for computing the digest of files. (default: md5)\n",
-		"                   Its values can be one in the following list:\n",
-		"\n",
-		"                   md5, sha1, sha224, sha256, sha384, sha512, sha512/224\n",
-		"                   sha512/256, fnv32, fnv32a, fnv64, fnv64a, fnv128, fnv128a\n",
-		"\n",
-		"       -filename - control whether to display the corresponded filenames when outputing\n",
-		"                   the digest of files. (default: true)\n",
-		"\n",
-		"       -depth    - control the recursive depth of searching directories. (default: 1)\n",
-		"\n",
-		"       -all      - control whether process hidden files. (default: false)\n",
-		"\n",
-		"       -version  - control whether to display version information. (default: false)\n",
-		"\n",
-		"       -help     - control whether to display usage information. (defualt: false)\n",
-		"\n",
-		"       file      - the objective file of the hash algorithm. If its type is directory,\n",
-		"                   computing digests of all files in this directory recursively.\n",
-		"\n",
-	}
-	for _, msg := range msgs {
-		fprintf(w, msg)
-	}
+// factory specifices how to create a hash.Hash instance.
+type factory func() hash.Hash
+
+// factory32 specifies how to create a hash.Hash32 instance.
+type factory32 func() hash.Hash32
+
+// Converts a factory32 instance to the corresponded factory instance.
+func (f32 factory32) normalize() factory {
+	return func() hash.Hash { return f32() }
 }
 
-// Output version information.
-func version(w io.Writer) {
-	fprintf(w, "%s v%s (built w/%s)\n", "go-hash", binary, runtime.Version())
+// factory64 specifies how to create a hash.Hasn64 instance.
+type factory64 func() hash.Hash64
+
+// Converts a factory64 instance to the corresponded factory instance.
+func (f64 factory64) normalize() factory {
+	return func() hash.Hash { return f64() }
 }
 
-// Exit the process. If the 'e' parameter is not nil, print the error
-// message and display usage information.
-func exit(e error) {
-	if e != nil {
-		fprintf(stderr, "ERROR: %s\n", e)
-		usage(stderr)
-		os.Exit(1)
-	}
-	os.Exit(0)
-}
+/* Auxiliary Functions */
 
-// rsort (Reverse Sort) sorts a slice of strings in decreasing order.
+// The only reason I rename the following functions is simplify my codes.
+var (
+	sprintf = fmt.Sprintf
+	errorf  = fmt.Errorf
+	fprintf = fmt.Fprintf
+	stdout  = os.Stdout
+	stderr  = os.Stderr
+	join    = filepath.Join
+)
+
+// rsort (Reverse Sort) sorts a slice of strings in decreasing alphabetical order.
 func rsort(strs []string) {
 	sort.Sort(sort.Reverse(sort.StringSlice(strs)))
 }
