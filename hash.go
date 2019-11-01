@@ -3,7 +3,7 @@
 // Author: blinklv <blinklv@icloud.com>
 // Create Time: 2019-10-23
 // Maintainer: blinklv <blinklv@icloud.com>
-// Last Change: 2019-10-31
+// Last Change: 2019-11-01
 
 // A simple command tool to calculate the digest value of files. It supports some
 // primary Message-Digest Hash algorithms, like MD5, FNV family, and SHA family.
@@ -141,9 +141,9 @@ func walk(exit trigger, roots []string) chan *node {
 
 		// Iterate the node stack.
 		var top *node
-		for i := 0; len(S) > 0 && S[len(S)-1].depth <= *_depth; i++ {
+		for i := 0; len(S) > 0; i++ {
 			top, S = S[len(S)-1], S[:len(S)-1] // Pop the top node.
-			if top.err == nil {
+			if top.err == nil && top.depth < *_depth {
 				if children := top.children(); len(children) > 0 {
 					S = append(S, children...)
 				}
