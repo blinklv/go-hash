@@ -3,7 +3,7 @@
 // Author: blinklv <blinklv@icloud.com>
 // Create Time: 2019-10-23
 // Maintainer: blinklv <blinklv@icloud.com>
-// Last Change: 2019-11-01
+// Last Change: 2019-11-04
 
 // A simple command tool to calculate the digest value of files. It supports some
 // primary Message-Digest Hash algorithms, like MD5, FNV family, and SHA family.
@@ -19,6 +19,7 @@ import (
 	"hash"
 	"hash/fnv"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -148,10 +149,35 @@ func walk(exit trigger, roots []string) chan *node {
 					S = append(S, children...)
 				}
 			}
-			nodes <- top.mark(i)
+
+			select {
+			case nodes <- top.mark(i):
+			case <-exit:
+				return
+			}
 		}
 	}()
 	return nodes
+}
+
+// Worker goroutine to compute the digest of files.
+func digester(exit trigger, input, output chan *node) {
+	// Some hash.Hash implementations are not concurrent safe, so we need to
+	// create a new instance for a single digester goroutine.
+	h := creator()
+	for n := range input {
+		h.Reset() // NOTE: Don't forget this operation.
+
+		data, err := ioutil.ReadFile(n.path)
+		h.Write(data)
+		n.sum, n.err = h.Sum(nil), err
+
+		select {
+		case output <- n:
+		case <-exit:
+			return
+		}
+	}
 }
 
 // Output version information.
@@ -209,19 +235,8 @@ func (n *node) mark(i int) *node {
 // it will store the error to the 'err' field.
 func (n *node) children() []*node {
 	if n.IsDir() {
-		var (
-			f     *os.File
-			names []string
-		)
-
-		f, n.err = os.Open(n.path)
-		if n.err != nil {
-			return nil
-		}
-
-		names, n.err = f.Readdirnames(-1)
-		f.Close()
-		if n.err != nil {
+		var names []string
+		if names, n.err = readdir(n.path); n.err != nil {
 			return nil
 		}
 
@@ -270,4 +285,14 @@ var (
 // rsort (Reverse Sort) sorts a slice of strings in decreasing alphabetical order.
 func rsort(strs []string) {
 	sort.Sort(sort.Reverse(sort.StringSlice(strs)))
+}
+
+// Reads the directory named by dirname and returns a list of entries name.
+func readdir(dirname string) ([]string, error) {
+	dir, err := os.Open(dirname)
+	if err != nil {
+		return nil, err
+	}
+	defer dir.Close()
+	return dir.Readdirnames(-1)
 }
