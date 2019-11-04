@@ -133,12 +133,9 @@ func parse_arg() []string {
 func walk(exit trigger, roots []string) chan *node {
 	nodes := make(chan *node, numDigester)
 	go func() {
-		// Initialize the node stack.
-		rsort(roots)
-		S := make([]*node, 0, len(roots))
-		for _, root := range roots {
-			S = append(S, (&node{}).initialize(root))
-		}
+		// Initialize the node stack. Cause the depth of root nodes
+		// is zero; the depth of their parent is -1.
+		S := (&node{depth: -1}).nodes(roots)
 
 		// Iterate the node stack.
 		var top *node
@@ -239,16 +236,20 @@ func (n *node) children() []*node {
 		if names, n.err = readdir(n.path); n.err != nil {
 			return nil
 		}
-
-		rsort(names)
-		children := make([]*node, 0, len(names))
-		for _, name := range names {
-			children = append(children, (&node{
-				depth: n.depth + 1,
-			}).initialize(join(n.path, name)))
-		}
+		return n.nodes(names)
 	}
 	return nil
+}
+
+// Convert multiple filenames to the corresponded nodes based on the current node.
+func (n *node) nodes(names []string) []*node {
+	var ns = make([]*node, 0, len(names))
+	for _, name := range rsort(names) {
+		ns = append(ns, (&node{
+			depth: n.depth + 1,
+		}).initialize(join(n.path, name)))
+	}
+	return ns
 }
 
 // factory specifices how to create a hash.Hash instance.
@@ -283,8 +284,9 @@ var (
 )
 
 // rsort (Reverse Sort) sorts a slice of strings in decreasing alphabetical order.
-func rsort(strs []string) {
+func rsort(strs []string) []string {
 	sort.Sort(sort.Reverse(sort.StringSlice(strs)))
+	return strs
 }
 
 // Reads the directory named by dirname and returns a list of entries name.
