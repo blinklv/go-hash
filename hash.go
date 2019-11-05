@@ -162,7 +162,7 @@ func walk(exit trigger, roots []string) (output chan *node) {
 
 // Get the file information from the input channel and compute its digest,
 // then push the result to the output channel.
-func digester(exit trigger, input chan *node) (output chan *node) {
+func digester(input chan *node) (output chan *node) {
 	output = make(chan *node, numDigester)
 	once := sync.Once{}
 
@@ -177,14 +177,8 @@ func digester(exit trigger, input chan *node) (output chan *node) {
 				data, err := ioutil.ReadFile(n.path)
 				h.Write(data)
 				n.sum, n.err = h.Sum(nil), err
-
-				select {
-				case output <- n:
-				case <-exit:
-					goto end
-				}
+				output <- n
 			}
-		end:
 			once.Do(func() { close(output) })
 		}()
 	}
@@ -192,7 +186,7 @@ func digester(exit trigger, input chan *node) (output chan *node) {
 }
 
 // Queue output results by walking sequence. (Running in a separate goroutine)
-func queue(exit trigger, input chan *node) (output chan *node) {
+func queue(input chan *node) (output chan *node) {
 	output = make(chan *node)
 	go func() {
 		var (
@@ -206,8 +200,8 @@ func queue(exit trigger, input chan *node) (output chan *node) {
 				next++
 
 				for n = cache[next]; n != nil; n = cache[next] {
-					output <- n
 					delete(cache, next)
+					output <- n
 					next++
 				}
 
@@ -215,6 +209,7 @@ func queue(exit trigger, input chan *node) (output chan *node) {
 				cache[n.i] = n
 			}
 		}
+		close(output)
 	}()
 	return output
 }
