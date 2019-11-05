@@ -21,10 +21,12 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"sync"
+	"syscall"
 )
 
 /* Global Constants and Variables */
@@ -100,7 +102,27 @@ var (
 /* Main Functions */
 
 func main() {
-	parse_arg()
+	var (
+		exit, done = make(trigger), make(trigger)
+		signals    = make(chan os.Signal, 8)
+	)
+
+	go func() {
+		display(queue(digester(walk(exit, parse_arg()))))
+		close(done)
+	}()
+
+	// There're two cases will cause the process exit. The first case
+	// is trival, computing digests of all files has done. The second
+	// case is triggered by some OS signals, it will make the process
+	// exits ahead of time.
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	select {
+	case <-signals:
+		close(exit)
+		<-done
+	case <-done:
+	}
 	return
 }
 
