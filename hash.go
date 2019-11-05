@@ -186,9 +186,10 @@ func walk(exit trigger, roots []string) (output chan *node) {
 // then push the result to the output channel.
 func digester(input chan *node) (output chan *node) {
 	output = make(chan *node, numDigester)
-	once := sync.Once{}
+	wg := &sync.WaitGroup{}
 
 	for i := 0; i < numDigester; i++ {
+		wg.Add(1)
 		go func() {
 			// Some hash.Hash implementations are not concurrent safe, so we need to
 			// create a new instance for a single digester goroutine.
@@ -201,9 +202,15 @@ func digester(input chan *node) (output chan *node) {
 				n.sum, n.err = h.Sum(nil), err
 				output <- n
 			}
-			once.Do(func() { close(output) })
+			wg.Done()
 		}()
 	}
+
+	go func() {
+		wg.Wait()
+		close(output)
+	}()
+
 	return output
 }
 
@@ -243,7 +250,7 @@ func display(input chan *node) {
 	)
 
 	for n := range input {
-		if !isHidden(n.path) || *_all {
+		if !n.IsDir() && (!isHidden(n.path) || *_all) {
 			if n.err == nil {
 				fprintf(stdout, "%x %s\n", n.sum, n.path)
 			} else {
