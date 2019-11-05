@@ -162,8 +162,12 @@ func walk(exit trigger, roots []string) (output chan *node) {
 
 		// Iterate the node stack.
 		var top *node
-		for i := 0; len(S) > 0; i++ {
-			top, S = S[len(S)-1], S[:len(S)-1] // Pop the top node.
+		for i := 0; len(S) > 0; {
+			top, S = S[len(S)-1], S[:len(S)-1]        // Pop the top node.
+			if !(*_all) && isHidden(top.filename()) { // Skip hidden files.
+				continue
+			}
+
 			if top.err == nil && top.depth < *_depth {
 				if children := top.children(); len(children) > 0 {
 					S = append(S, children...)
@@ -172,6 +176,7 @@ func walk(exit trigger, roots []string) (output chan *node) {
 
 			select {
 			case output <- top.mark(i):
+				i++
 			case <-exit:
 				goto end
 			}
@@ -250,11 +255,11 @@ func display(input chan *node) {
 	)
 
 	for n := range input {
-		if !n.IsDir() && (!isHidden(n.path) || *_all) {
+		if !n.isdir() {
 			if n.err == nil {
 				fprintf(stdout, "%x %s\n", n.sum, n.path)
 			} else {
-				fprintf(stdout, sprintf("%%%d.%ds %%s\\n", sw, sw), n.err, n.path)
+				fprintf(stdout, sprintf("%%%d.%ds %%s\n", sw, sw), n.err, n.path)
 			}
 		}
 	}
@@ -314,7 +319,7 @@ func (n *node) mark(i int) *node {
 // Return children node of a directory node. If there is something wrong,
 // it will store the error to the 'err' field.
 func (n *node) children() []*node {
-	if n.IsDir() {
+	if n.isdir() {
 		var names []string
 		if names, n.err = readdir(n.path); n.err != nil {
 			return nil
@@ -333,6 +338,22 @@ func (n *node) nodes(names []string) []*node {
 		}).initialize(join(n.path, name)))
 	}
 	return ns
+}
+
+// Return the corresponded filename to the node.
+func (n *node) filename() string {
+	if n.FileInfo != nil {
+		return n.Name()
+	}
+	return basename(n.path)
+}
+
+// Check whether a node describes a directory.
+func (n *node) isdir() bool {
+	if n.FileInfo != nil {
+		return n.IsDir()
+	}
+	return false
 }
 
 // factory specifices how to create a hash.Hash instance.
@@ -358,12 +379,13 @@ func (f64 factory64) normalize() factory {
 
 // The only reason I rename the following functions is simplify my codes.
 var (
-	sprintf = fmt.Sprintf
-	errorf  = fmt.Errorf
-	fprintf = fmt.Fprintf
-	stdout  = os.Stdout
-	stderr  = os.Stderr
-	join    = filepath.Join
+	sprintf  = fmt.Sprintf
+	errorf   = fmt.Errorf
+	fprintf  = fmt.Fprintf
+	stdout   = os.Stdout
+	stderr   = os.Stderr
+	join     = filepath.Join
+	basename = filepath.Base
 )
 
 // rsort (Reverse Sort) sorts a slice of strings in decreasing alphabetical order.
