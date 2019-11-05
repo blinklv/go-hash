@@ -3,7 +3,7 @@
 // Author: blinklv <blinklv@icloud.com>
 // Create Time: 2019-10-23
 // Maintainer: blinklv <blinklv@icloud.com>
-// Last Change: 2019-11-04
+// Last Change: 2019-11-05
 
 // A simple command tool to calculate the digest value of files. It supports some
 // primary Message-Digest Hash algorithms, like MD5, FNV family, and SHA family.
@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"sync"
 )
 
 /* Global Constants and Variables */
@@ -129,9 +130,9 @@ func parse_arg() []string {
 	return roots
 }
 
-// Traverse a directory tree in preorder.
-func walk(exit trigger, roots []string) chan *node {
-	nodes := make(chan *node, numDigester)
+// Traverse a directory tree in pre-order and push nodes to the output channel.
+func walk(exit trigger, roots []string) (output chan *node) {
+	output = make(chan *node)
 	go func() {
 		// Initialize the node stack. Cause the depth of root nodes
 		// is zero; the depth of their parent is -1.
@@ -148,33 +149,74 @@ func walk(exit trigger, roots []string) chan *node {
 			}
 
 			select {
-			case nodes <- top.mark(i):
+			case output <- top.mark(i):
 			case <-exit:
-				return
+				goto end
+			}
+		}
+	end:
+		close(output)
+	}()
+	return output
+}
+
+// Get the file information from the input channel and compute its digest,
+// then push the result to the output channel.
+func digester(exit trigger, input chan *node) (output chan *node) {
+	output = make(chan *node, numDigester)
+	once := sync.Once{}
+
+	for i := 0; i < numDigester; i++ {
+		go func() {
+			// Some hash.Hash implementations are not concurrent safe, so we need to
+			// create a new instance for a single digester goroutine.
+			h := creator()
+			for n := range input {
+				h.Reset() // NOTE: Don't forget this operation.
+
+				data, err := ioutil.ReadFile(n.path)
+				h.Write(data)
+				n.sum, n.err = h.Sum(nil), err
+
+				select {
+				case output <- n:
+				case <-exit:
+					goto end
+				}
+			}
+		end:
+			once.Do(func() { close(output) })
+		}()
+	}
+	return output
+}
+
+// Queue output results by walking sequence. (Running in a separate goroutine)
+func queue(exit trigger, input chan *node) (output chan *node) {
+	output = make(chan *node)
+	go func() {
+		var (
+			next  int                   // Mark the next node which we want to output.
+			cache = make(map[int]*node) // Caches nodes that haven't been outputed.
+		)
+
+		for n := range input {
+			if n.i == next {
+				output <- n
+				next++
+
+				for n = cache[next]; n != nil; n = cache[next] {
+					output <- n
+					delete(cache, next)
+					next++
+				}
+
+			} else {
+				cache[n.i] = n
 			}
 		}
 	}()
-	return nodes
-}
-
-// Worker goroutine to compute the digest of files.
-func digester(exit trigger, input, output chan *node) {
-	// Some hash.Hash implementations are not concurrent safe, so we need to
-	// create a new instance for a single digester goroutine.
-	h := creator()
-	for n := range input {
-		h.Reset() // NOTE: Don't forget this operation.
-
-		data, err := ioutil.ReadFile(n.path)
-		h.Write(data)
-		n.sum, n.err = h.Sum(nil), err
-
-		select {
-		case output <- n:
-		case <-exit:
-			return
-		}
-	}
+	return output
 }
 
 // Output version information.
