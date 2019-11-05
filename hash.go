@@ -214,6 +214,23 @@ func queue(input chan *node) (output chan *node) {
 	return output
 }
 
+// Print digest of files to the standard output.
+func display(input chan *node) {
+	var (
+		sw = 2 * (creator()).Size() // Hash sum width (HEX format).
+	)
+
+	for n := range input {
+		if !isHidden(n.path) || *_all {
+			if n.err == nil {
+				fprintf(stdout, "%x %s\n", n.sum, n.path)
+			} else {
+				fprintf(stdout, sprintf("%%%d.%ds %%s\\n", sw, sw), n.err, n.path)
+			}
+		}
+	}
+}
+
 // Output version information.
 func version(w io.Writer) {
 	fprintf(w, "%s v%s (built w/%s)\n", "go-hash", binary, runtime.Version())
