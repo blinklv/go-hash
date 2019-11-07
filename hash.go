@@ -3,17 +3,20 @@
 // Author: blinklv <blinklv@icloud.com>
 // Create Time: 2019-10-23
 // Maintainer: blinklv <blinklv@icloud.com>
-// Last Change: 2019-11-05
+// Last Change: 2019-11-07
 
 // A simple command tool to calculate the digest value of files. It supports some
 // primary Message-Digest Hash algorithms, like MD5, FNV family, and SHA family.
 package main
 
 import (
+	"crypto/hmac"
 	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
+	"encoding/base64"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"hash"
@@ -25,6 +28,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strings"
 	"sync"
 	"syscall"
 )
@@ -45,6 +49,9 @@ const numDigester = 16
 // maybe happen.
 var creator factory
 
+// Keyed-Hash Message Authentication Code (HMAC) sign key.
+var hmacKey []byte
+
 // factories variable specifies all HASH algorithms supported by this tool.
 var factories = map[string]factory{
 	"md5":        md5.New,
@@ -61,6 +68,13 @@ var factories = map[string]factory{
 	"fnv64a":     (factory64(fnv.New64a)).normalize(),
 	"fnv128":     fnv.New128,
 	"fnv128a":    fnv.New128a,
+}
+
+// keydecs variable specifies all key formats.
+var keydecs = map[string]keydec{
+	"binary": keydecBinary,
+	"base64": keydecBase64,
+	"hex":    keydecHex,
 }
 
 // Help document.
@@ -80,6 +94,14 @@ var usages = []string{
 	"\n",
 	"       -all      - control whether process hidden files. (default: false)\n",
 	"\n",
+	"       -hmac_key - HMAC secret key. It will compute hash-based message authentication codes\n",
+	"                   instead of digests when you specify a legal key. A key should meet the\n",
+	"                   requirements: 'encoding-scheme':'data'. The combinations you can select:\n",
+	"\n",
+	"                       'binary':'path of the secret key file'\n",
+	"                       'base64':'standard base64 encoded string'\n",
+	"                          'hex':'hex encoded string'\n",
+	"\n",
 	"       -version  - control whether to display version information. (default: false)\n",
 	"\n",
 	"       -help     - control whether to display usage information. (defualt: false)\n",
@@ -95,6 +117,7 @@ var (
 	_filename = flag.Bool("filename", true, "")
 	_depth    = flag.Int("depth", 1, "")
 	_all      = flag.Bool("all", false, "")
+	_hmac_key = flag.String("hmac_key", "", "")
 	_version  = flag.Bool("version", false, "")
 	_help     = flag.Bool("help", false, "")
 )
@@ -143,6 +166,24 @@ func parse_arg() []string {
 
 	if creator = factories[*_algo]; creator == nil {
 		exit(errorf("unknown hash algorithm '%s'", *_algo))
+	}
+
+	if *_hmac_key != "" {
+		var k = &key{}
+		err := k.initialize(*_hmac_key)
+		if err != nil {
+			exit(err)
+		}
+
+		var dec keydec
+		if dec = keydecs[k.scheme]; dec == nil {
+			exit(errorf("unknown key scheme (%s)", k.scheme))
+		}
+
+		if hmacKey, err = dec(k.data); err != nil {
+			exit(errorf("hmac key (%s) is illegal: %s", *_hmac_key, err))
+		}
+		creator = factoryHMAC(creator).normalize()
 	}
 
 	var roots []string // Root files to be processed.
@@ -367,13 +408,49 @@ func (f32 factory32) normalize() factory {
 	return func() hash.Hash { return f32() }
 }
 
-// factory64 specifies how to create a hash.Hasn64 instance.
+// factory64 specifies how to create a hash.Hash64 instance.
 type factory64 func() hash.Hash64
 
 // Converts a factory64 instance to the corresponded factory instance.
 func (f64 factory64) normalize() factory {
 	return func() hash.Hash { return f64() }
 }
+
+// factoryHMAC specifies how to create a HMAC hash.Hash instance.
+type factoryHMAC func() hash.Hash
+
+// Converts a factoryHMAC instance to the corresponded factory instance.
+func (fh factoryHMAC) normalize() factory {
+	return func() hash.Hash { return hmac.New(fh, hmacKey) }
+}
+
+// Inner representations of all *_key options (eg. hmac_key)
+type key struct {
+	scheme string
+	data   string
+}
+
+// Initialize a key from a *_key option (eg. hmac_key)
+func (k *key) initialize(str string) error {
+	strs := strings.SplitN(str, ":", 2)
+	if len(strs) != 2 {
+		return errorf("invalid key '%s'", str)
+	}
+	k.scheme, k.data = strs[0], strs[1]
+	return nil
+}
+
+// keydec (Secret Key Decoder) specifies how to decode a key of a particular format.
+type keydec func(string) ([]byte, error)
+
+// Decode a key from a normal binary file.
+var keydecBinary = ioutil.ReadFile
+
+// Decode a key from a base64 encoded string.
+var keydecBase64 = base64.StdEncoding.DecodeString
+
+// Decode a key from a hex encoded string.
+var keydecHex = hex.DecodeString
 
 /* Auxiliary Functions */
 
