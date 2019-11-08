@@ -110,7 +110,8 @@ var usages = []string{
 	"       -help     - control whether to display usage information. (defualt: false)\n",
 	"\n",
 	"       file      - the objective file of the hash algorithm. If its type is directory,\n",
-	"                   computing digests of all files in this directory recursively.\n",
+	"                   computing digests of all files in this directory recursively. This\n",
+	"                   tool will read from the stdin when no file specified.\n",
 	"\n",
 }
 
@@ -190,11 +191,7 @@ func parse_arg() []string {
 		creator = factoryHMAC(creator).normalize()
 	}
 
-	var roots []string // Root files to be processed.
-	if roots = flag.Args(); len(roots) == 0 {
-		exit(errorf("no input file specified"))
-	}
-	return roots
+	return flag.Args() // Root files to be processed.
 }
 
 // Traverse a directory tree in pre-order and push nodes to the output channel.
@@ -203,7 +200,12 @@ func walk(exit trigger, roots []string) (output chan *node) {
 	go func() {
 		// Initialize the node stack. Cause the depth of root nodes
 		// is zero; the depth of their parent is -1.
-		S := (&node{depth: -1}).nodes(roots)
+		var S []*node
+		if len(roots) > 0 {
+			S = (&node{depth: -1}).nodes(roots)
+		} else {
+			S = []*node{&node{}}
+		}
 
 		// Iterate the node stack.
 		var top *node
@@ -247,7 +249,7 @@ func digester(input chan *node) (output chan *node) {
 			for n := range input {
 				h.Reset() // NOTE: Don't forget this operation.
 
-				data, err := ioutil.ReadFile(n.path)
+				data, err := n.read()
 				h.Write(data)
 				n.sum, n.err = h.Sum(nil), err
 				output <- n
@@ -377,15 +379,7 @@ func (n *node) nodes(names []string) []*node {
 	return ns
 }
 
-// Return the corresponded filename to the node.
-func (n *node) filename() string {
-	if n.FileInfo != nil {
-		return n.Name()
-	}
-	return filepath.Base(n.path)
-}
-
-// Check whether a node describes a directory.
+// isdir() checks whether the node describes a directory.
 func (n *node) isdir() bool {
 	if n.FileInfo != nil {
 		return n.IsDir()
@@ -393,10 +387,39 @@ func (n *node) isdir() bool {
 	return false
 }
 
+// filename() returns the file name of the node.
+func (n *node) filename() string {
+	if n.FileInfo != nil {
+		return n.Name()
+	}
+
+	// NOTE: filepath.Base returns "." when the path is empty, which will
+	// cause the standard input to be skipped in normal case (_all flag is
+	// unset). So I use the _path() method instead of the path field.
+	return filepath.Base(n._path() /* not path */)
+}
+
+// read() reads from the file or the standard input until an error or EOF
+// and returns the data it read.
+func (n *node) read() ([]byte, error) {
+	if n.path != "" {
+		return ioutil.ReadFile(n.path)
+	}
+	return ioutil.ReadAll(os.Stdin)
+}
+
+// _path() returns "-" instead of an empty string when the path is empty.
+func (n *node) _path() string {
+	if n.path != "" {
+		return n.path
+	}
+	return "-" // Represents the standard input (stdin).
+}
+
 // String returns the string form of a node.
 func (n *node) String() string {
 	if n.err == nil && *_filename {
-		return sprintf("%x  %s", n.sum, n.path)
+		return sprintf("%x  %s", n.sum, n._path())
 	} else if n.err == nil && !(*_filename) {
 		return sprintf("%x", n.sum)
 	} else { // The file name can't be skipped when something wrong.
@@ -410,7 +433,7 @@ func (n *node) String() string {
 			line, rest = cut(rest, 2*sumSize)
 			// The first line contains the file name.
 			if len(lines) == 0 {
-				line = sprintf(sprintf("%%-%ds  %%s", 2*sumSize), line, n.path)
+				line = sprintf(sprintf("%%-%ds  %%s", 2*sumSize), line, n._path())
 			}
 			lines = append(lines, line)
 		}
