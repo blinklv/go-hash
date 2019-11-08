@@ -416,27 +416,20 @@ func (n *node) _path() string {
 	return "-" // Represents the standard input (stdin).
 }
 
-// String returns the string form of a node.
+// String() returns the string form of the node.
 func (n *node) String() string {
 	if n.err == nil && *_filename {
 		return sprintf("%x  %s", n.sum, n._path())
 	} else if n.err == nil && !(*_filename) {
 		return sprintf("%x", n.sum)
-	} else { // The file name can't be skipped when something wrong.
-		var (
-			rest  = sprintf("ERROR: %s", n.err)
-			line  string
-			lines = make([]string, 0, 1)
-		)
+	} else {
+		lines := split(sprintf("ERROR: %s", n.err), 2*sumSize)
 
-		for rest != "" {
-			line, rest = cut(rest, 2*sumSize)
-			// The first line contains the file name.
-			if len(lines) == 0 {
-				line = sprintf(sprintf("%%-%ds  %%s", 2*sumSize), line, n._path())
-			}
-			lines = append(lines, line)
-		}
+		// Pads the last line with extra blank spaces and appends the file
+		// name to the first line. NOTE: The order of these two operations
+		// can't be exchanged.
+		lines[len(lines)-1] = pad(lines[len(lines)-1], 2*sumSize)
+		lines[0] = sprintf("%s  %s", lines[0], n._path())
 		return strings.Join(lines, "\n")
 	}
 }
@@ -523,11 +516,34 @@ func readdir(dirname string) ([]string, error) {
 	return dir.Readdirnames(-1)
 }
 
-// Cut a string into two parts. If the size of a string is not greater than the
-// cut point, the second part will be empty.
+// split() slices a string into substrings of the fixed-width except for the last line.
+func split(rest string, width int) []string {
+	var (
+		line  string
+		lines = make([]string, 0, 1)
+	)
+
+	for rest != "" {
+		line, rest = cut(rest, width)
+		lines = append(lines, line)
+	}
+	return lines
+}
+
+// cut() cuts a string into two parts. The second part will be empty when
+// the size of a string is not greater than the cut point.
 func cut(str string, cp int /* cut point */) (a, b string) {
 	if len(str) > cp {
 		return str[:cp], str[cp:]
 	}
 	return str, ""
+}
+
+// pad() pads extra blank spaces to a string to make its size reach the width.
+// If the size of the string is not less than the width, nothing happens.
+func pad(str string, width int) string {
+	if n := len(str); n < width {
+		return str + strings.Repeat(" ", width-n)
+	}
+	return str
 }
