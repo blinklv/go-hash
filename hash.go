@@ -3,7 +3,7 @@
 // Author: blinklv <blinklv@icloud.com>
 // Create Time: 2019-10-23
 // Maintainer: blinklv <blinklv@icloud.com>
-// Last Change: 2019-11-07
+// Last Change: 2019-11-08
 
 // A simple command tool to calculate the digest value of files. It supports some
 // primary Message-Digest Hash algorithms, like MD5, FNV family, and SHA family.
@@ -48,6 +48,9 @@ const numDigester = 16
 // digester goroutines use a global hash.Hash instance simultaneously, some exceptions
 // maybe happen.
 var creator factory
+
+// Number of hash sum bytes.
+var sumSize int
 
 // Keyed-Hash Message Authentication Code (HMAC) sign key.
 var hmacKey []byte
@@ -167,6 +170,7 @@ func parse_arg() []string {
 	if creator = factories[*_algo]; creator == nil {
 		exit(errorf("unknown hash algorithm '%s'", *_algo))
 	}
+	sumSize = (creator()).Size()
 
 	if *_hmac_key != "" {
 		var k = &key{}
@@ -291,17 +295,9 @@ func queue(input chan *node) (output chan *node) {
 
 // Print digest of files to the standard output.
 func display(input chan *node) {
-	var (
-		sw = 2 * (creator()).Size() // Hash sum width (HEX format).
-	)
-
 	for n := range input {
 		if !n.isdir() {
-			if n.err == nil {
-				fprintf(stdout, "%x %s\n", n.sum, n.path)
-			} else {
-				fprintf(stdout, sprintf("%%%d.%ds %%s\n", sw, sw), n.err, n.path)
-			}
+			fprintf(stdout, "%s\n", n)
 		}
 	}
 }
@@ -376,7 +372,7 @@ func (n *node) nodes(names []string) []*node {
 	for _, name := range rsort(names) {
 		ns = append(ns, (&node{
 			depth: n.depth + 1,
-		}).initialize(join(n.path, name)))
+		}).initialize(filepath.Join(n.path, name)))
 	}
 	return ns
 }
@@ -386,7 +382,7 @@ func (n *node) filename() string {
 	if n.FileInfo != nil {
 		return n.Name()
 	}
-	return basename(n.path)
+	return filepath.Base(n.path)
 }
 
 // Check whether a node describes a directory.
@@ -395,6 +391,31 @@ func (n *node) isdir() bool {
 		return n.IsDir()
 	}
 	return false
+}
+
+// String returns the string form of a node.
+func (n *node) String() string {
+	if n.err == nil && *_filename {
+		return sprintf("%x  %s", n.sum, n.path)
+	} else if n.err == nil && !(*_filename) {
+		return sprintf("%x", n.sum)
+	} else { // The file name can't be skipped when something wrong.
+		var (
+			rest  = sprintf("ERROR: %s", n.err)
+			line  string
+			lines = make([]string, 0, 1)
+		)
+
+		for rest != "" {
+			line, rest = cut(rest, 2*sumSize)
+			// The first line contains the file name.
+			if len(lines) == 0 {
+				line = sprintf(sprintf("%%-%ds  %%s", 2*sumSize), line, n.path)
+			}
+			lines = append(lines, line)
+		}
+		return strings.Join(lines, "\n")
+	}
 }
 
 // factory specifices how to create a hash.Hash instance.
@@ -456,13 +477,11 @@ var keydecHex = hex.DecodeString
 
 // The only reason I rename the following functions is simplify my codes.
 var (
-	sprintf  = fmt.Sprintf
-	errorf   = fmt.Errorf
-	fprintf  = fmt.Fprintf
-	stdout   = os.Stdout
-	stderr   = os.Stderr
-	join     = filepath.Join
-	basename = filepath.Base
+	sprintf = fmt.Sprintf
+	errorf  = fmt.Errorf
+	fprintf = fmt.Fprintf
+	stdout  = os.Stdout
+	stderr  = os.Stderr
 )
 
 // rsort (Reverse Sort) sorts a slice of strings in decreasing alphabetical order.
@@ -479,4 +498,13 @@ func readdir(dirname string) ([]string, error) {
 	}
 	defer dir.Close()
 	return dir.Readdirnames(-1)
+}
+
+// Cut a string into two parts. If the size of a string is not greater than the
+// cut point, the second part will be empty.
+func cut(str string, cp int /* cut point */) (a, b string) {
+	if len(str) > cp {
+		return str[:cp], str[cp:]
+	}
+	return str, ""
 }
