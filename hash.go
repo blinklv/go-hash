@@ -55,6 +55,10 @@ var sumSize int
 // Keyed-Hash Message Authentication Code (HMAC) sign key.
 var hmacKey []byte
 
+// Standard input, standard output, and standard error file descriptors.
+// The only reason I rename these three variables is simplify my codes :)
+var stdin, stdout, stderr = os.Stdin, os.Stdout, os.Stderr
+
 // factories variable specifies all HASH algorithms supported by this tool.
 var factories = map[string]factory{
 	"md5":        md5.New,
@@ -491,22 +495,16 @@ var keydecHex = hex.DecodeString
 
 /* Auxiliary Functions */
 
-// The only reason I rename the following functions is simplify my codes.
-var (
-	sprintf = fmt.Sprintf
-	errorf  = fmt.Errorf
-	fprintf = fmt.Fprintf
-	stdout  = os.Stdout
-	stderr  = os.Stderr
-)
+// The only reason I rename the following functions is simplify my codes :)
+var sprintf, errorf, fprintf = fmt.Sprintf, fmt.Errorf, fmt.Fprintf
 
-// rsort (Reverse Sort) sorts a slice of strings in decreasing alphabetical order.
+// rsort() (Reverse Sort) sorts a slice of strings in decreasing alphabetical order.
 func rsort(strs []string) []string {
 	sort.Sort(sort.Reverse(sort.StringSlice(strs)))
 	return strs
 }
 
-// Reads the directory named by dirname and returns a list of entries name.
+// readdir() reads the directory named by dirname and returns a list of entries name.
 func readdir(dirname string) ([]string, error) {
 	dir, err := os.Open(dirname)
 	if err != nil {
