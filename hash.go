@@ -332,22 +332,22 @@ type node struct {
 	err   error
 }
 
-// Initialize a node by using its path and return itself. If there
-// exists any problem, it will store the error to the 'err' field.
+// initialize() initializes a node instance by using its path and returns itself.
+// If something wrong, it will store the error to the err field.
 func (n *node) initialize(path string) *node {
 	n.path = path
 	n.FileInfo, n.err = os.Lstat(path)
 	return n
 }
 
-// Using 'walk sequence' to mark a node has been traversed.
+// mark() uses the walk sequence to mark the node has been traversed.
 func (n *node) mark(i int) *node {
 	n.i = i
 	return n
 }
 
-// Return children node of a directory node. If there is something wrong,
-// it will store the error to the 'err' field.
+// children() returns children node of a directory node. If something wrong,
+// it will store the error to the err field of the current node.
 func (n *node) children() []*node {
 	if n.isdir() {
 		var names []string
@@ -359,7 +359,8 @@ func (n *node) children() []*node {
 	return nil
 }
 
-// Convert multiple filenames to the corresponded nodes based on the current node.
+// nodes() converts multiple filenames to the corresponded nodes whose depth and
+// path are computed based on the current node.
 func (n *node) nodes(names []string) []*node {
 	var ns = make([]*node, 0, len(names))
 	for _, name := range rsort(names) {
@@ -431,7 +432,7 @@ type factory func() hash.Hash
 // factory32 specifies how to create a hash.Hash32 instance.
 type factory32 func() hash.Hash32
 
-// Converts a factory32 instance to the corresponded factory instance.
+// normalize() converts a factory32 instance to the corresponded factory instance.
 func (f32 factory32) normalize() factory {
 	return func() hash.Hash { return f32() }
 }
@@ -439,7 +440,7 @@ func (f32 factory32) normalize() factory {
 // factory64 specifies how to create a hash.Hash64 instance.
 type factory64 func() hash.Hash64
 
-// Converts a factory64 instance to the corresponded factory instance.
+// normalize() converts a factory64 instance to the corresponded factory instance.
 func (f64 factory64) normalize() factory {
 	return func() hash.Hash { return f64() }
 }
@@ -447,7 +448,7 @@ func (f64 factory64) normalize() factory {
 // factoryHMAC specifies how to create a HMAC hash.Hash instance.
 type factoryHMAC func() hash.Hash
 
-// Converts a factoryHMAC instance to the corresponded factory instance.
+// normalize() converts a factoryHMAC instance to the corresponded factory instance.
 func (fh factoryHMAC) normalize() factory {
 	return func() hash.Hash { return hmac.New(fh, hmacKey) }
 }
