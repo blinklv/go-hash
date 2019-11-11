@@ -3,7 +3,7 @@
 // Author: blinklv <blinklv@icloud.com>
 // Create Time: 2019-10-23
 // Maintainer: blinklv <blinklv@icloud.com>
-// Last Change: 2019-11-08
+// Last Change: 2019-11-11
 
 // A simple command tool to calculate the digest value of files. It supports some
 // primary Message-Digest Hash algorithms, like MD5, FNV family, and SHA family.
@@ -75,13 +75,6 @@ var factories = map[string]factory{
 	"fnv64a":     (factory64(fnv.New64a)).normalize(),
 	"fnv128":     fnv.New128,
 	"fnv128a":    fnv.New128a,
-}
-
-// keydecs variable specifies all key formats.
-var keydecs = map[string]keydec{
-	"binary": keydecBinary,
-	"base64": keydecBase64,
-	"hex":    keydecHex,
 }
 
 // Help document.
@@ -178,19 +171,13 @@ func parse_arg() []string {
 	sumSize = (creator()).Size()
 
 	if *_hmac_key != "" {
-		var k = &key{}
-		err := k.initialize(*_hmac_key)
+		key, err := (&secretKey{}).initialize(*_hmac_key)
 		if err != nil {
 			exit(err)
 		}
 
-		var dec keydec
-		if dec = keydecs[k.scheme]; dec == nil {
-			exit(errorf("unknown key scheme (%s)", k.scheme))
-		}
-
-		if hmacKey, err = dec(k.data); err != nil {
-			exit(errorf("hmac key (%s) is illegal: %s", *_hmac_key, err))
+		if hmacKey, err = key.decode(); err != nil {
+			exit(errorf("parse secret key failed: %s", err))
 		}
 		creator = factoryHMAC(creator).normalize()
 	}
@@ -465,33 +452,36 @@ func (fh factoryHMAC) normalize() factory {
 	return func() hash.Hash { return hmac.New(fh, hmacKey) }
 }
 
-// Inner representations of all *_key options (eg. hmac_key)
-type key struct {
+// Storage format of secret keys. The scheme field specifies how to parse
+// the data and the data field represents the secret key itself.
+type secretKey struct {
 	scheme string
 	data   string
 }
 
-// Initialize a key from a *_key option (eg. hmac_key)
-func (k *key) initialize(str string) error {
+// initialize() initializes a secretKey instance from *_key options (eg. hmac_key)
+func (key *secretKey) initialize(str string) (*secretKey, error) {
 	strs := strings.SplitN(str, ":", 2)
 	if len(strs) != 2 {
-		return errorf("invalid key '%s'", str)
+		return nil, errorf("invalid secret key '%s'", str)
 	}
-	k.scheme, k.data = strs[0], strs[1]
-	return nil
+	key.scheme, key.data = strs[0], strs[1]
+	return key, nil
 }
 
-// keydec (Secret Key Decoder) specifies how to decode a key of a particular format.
-type keydec func(string) ([]byte, error)
-
-// Decode a key from a normal binary file.
-var keydecBinary = ioutil.ReadFile
-
-// Decode a key from a base64 encoded string.
-var keydecBase64 = base64.StdEncoding.DecodeString
-
-// Decode a key from a hex encoded string.
-var keydecHex = hex.DecodeString
+// decode() decodes the secret key of a particular format.
+func (key *secretKey) decode() ([]byte, error) {
+	switch key.scheme {
+	case "binary":
+		return ioutil.ReadFile(key.data)
+	case "base64":
+		return base64.StdEncoding.DecodeString(key.data)
+	case "hex":
+		return hex.DecodeString(key.data)
+	default:
+		return nil, errorf("unknown secret key scheme (%s)", key.scheme)
+	}
+}
 
 /* Auxiliary Functions */
 
