@@ -3,7 +3,7 @@
 // Author: blinklv <blinklv@icloud.com>
 // Create Time: 2019-10-23
 // Maintainer: blinklv <blinklv@icloud.com>
-// Last Change: 2019-11-11
+// Last Change: 2019-11-12
 
 // A simple command tool to calculate the digest value of files. It supports some
 // primary Message-Digest Hash algorithms, like MD5, FNV family, and SHA family.
@@ -56,7 +56,7 @@ var sumSize int
 var hmacKey []byte
 
 // Standard input, standard output, and standard error file descriptors.
-// The only reason I rename these three variables is simplify my codes :)
+// The only reason I rename these three variables is simplifying my codes :)
 var stdin, stdout, stderr = os.Stdin, os.Stdout, os.Stderr
 
 // factories variable specifies all HASH algorithms supported by this tool.
@@ -257,28 +257,21 @@ func digester(input chan *node) (output chan *node) {
 	return output
 }
 
-// Queue output results by walking sequence. (Running in a separate goroutine)
+// queue() will sort results by walking sequence and output them.
 func queue(input chan *node) (output chan *node) {
 	output = make(chan *node)
 	go func() {
-		var (
-			next  int                   // Mark the next node which we want to output.
-			cache = make(map[int]*node) // Caches nodes that haven't been outputed.
-		)
+		// If the walk sequence (the 'i' field) of a node is greater than
+		// the 'next' variable, the node will be cached. It will be outputted
+		// until the 'next' variable is increased to equal to its sequence.
+		next, cache := 0, make(map[int]*node)
 
 		for n := range input {
-			if n.i == next {
+			cache[n.i] = n
+			for n = cache[next]; n != nil; n = cache[next] {
+				delete(cache, next)
 				output <- n
 				next++
-
-				for n = cache[next]; n != nil; n = cache[next] {
-					delete(cache, next)
-					output <- n
-					next++
-				}
-
-			} else {
-				cache[n.i] = n
 			}
 		}
 		close(output)
@@ -286,7 +279,7 @@ func queue(input chan *node) (output chan *node) {
 	return output
 }
 
-// Print digest of files to the standard output.
+// display() outputs the digest of files to the standard output.
 func display(input chan *node) {
 	for n := range input {
 		if !n.isdir() {
@@ -295,13 +288,13 @@ func display(input chan *node) {
 	}
 }
 
-// Output version information.
+// version() outputs the version information to the w io.Writer.
 func version(w io.Writer) {
 	fprintf(w, "%s v%s (built w/%s)\n", "go-hash", binary, runtime.Version())
 }
 
-// Exit the process. If the 'e' parameter is not nil, print the error
-// message and display usage information.
+// exit() exits the process. If the e parameter is not nil, outputs the error
+// message and usage informations to the stderr.
 func exit(e error) {
 	if e != nil {
 		fprintf(stderr, "ERROR: %s\n", e)
@@ -311,7 +304,7 @@ func exit(e error) {
 	os.Exit(0)
 }
 
-// Output usage information.
+// help() outputs usage informations to the w io.Writer.
 func help(w io.Writer) {
 	for _, usage := range usages {
 		fprintf(w, usage)
@@ -486,7 +479,7 @@ func (key *secretKey) decode() ([]byte, error) {
 
 /* Auxiliary Functions */
 
-// The only reason I rename the following functions is simplify my codes :)
+// The only reason I rename the following functions is simplifying my codes :)
 var sprintf, errorf, fprintf = fmt.Sprintf, fmt.Errorf, fmt.Fprintf
 
 // rsort() (Reverse Sort) sorts a slice of strings in decreasing alphabetical order.
