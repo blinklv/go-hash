@@ -225,35 +225,26 @@ func walk(exit trigger, roots []string) (output chan *node) {
 	return output
 }
 
-// Get the file information from the input channel and compute its digest,
-// then push the result to the output channel.
+// digester() gets the file information from the input channel and computes
+// their digests, then pushes the results to the output channel.
 func digester(input chan *node) (output chan *node) {
 	output = make(chan *node, numDigester)
-	wg := &sync.WaitGroup{}
-
-	for i := 0; i < numDigester; i++ {
-		wg.Add(1)
-		go func() {
-			// Some hash.Hash implementations are not concurrent safe, so we need to
-			// create a new instance for a single digester goroutine.
+	go func() {
+		crun(numDigester, func() {
+			// NOTE: Some hash.Hash implementations are not concurrent
+			// safe, so we need to create a new one for each goroutine.
 			h := creator()
 			for n := range input {
-				h.Reset() // NOTE: Don't forget this operation.
+				h.Reset() // Key step!
 
 				data, err := n.read()
 				h.Write(data)
 				n.sum, n.err = h.Sum(nil), err
 				output <- n
 			}
-			wg.Done()
-		}()
-	}
-
-	go func() {
-		wg.Wait()
+		})
 		close(output)
 	}()
-
 	return output
 }
 
@@ -528,4 +519,19 @@ func pad(str string, width int) string {
 		return str + strings.Repeat(" ", width-n)
 	}
 	return str
+}
+
+// crun() runs multiple functions concurrently. It returns only after
+// all subfunctions have done.
+func crun(cnum int /* concurrency number */, cb func()) {
+	wg := &sync.WaitGroup{}
+	for i := 0; i < cnum; i++ {
+		wg.Add(1)
+		go func() {
+			cb()
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+	return
 }
