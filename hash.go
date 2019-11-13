@@ -238,7 +238,7 @@ func digester(input chan *node) (output chan *node) {
 			// safe, so we need to create a new one for each goroutine.
 			h := creator()
 			for n := range input {
-				if n.err == nil {
+				if n.err == nil && n.isregular() {
 					h.Reset() // Key step!
 
 					data, err := n.read()
@@ -278,7 +278,7 @@ func queue(input chan *node) (output chan *node) {
 // display() outputs the digest of files to the standard output.
 func display(input chan *node) {
 	for n := range input {
-		if !n.isdir() {
+		if n.isregular() {
 			fprintf(stdout, "%s\n", n)
 		}
 	}
@@ -358,6 +358,14 @@ func (n *node) nodes(names []string) []*node {
 		}).initialize(filepath.Join(n.path, name)))
 	}
 	return ns
+}
+
+// isregular() checks whether the node describes a regular file.
+func (n *node) isregular() bool {
+	if n.FileInfo != nil {
+		return n.Mode().IsRegular()
+	}
+	return true
 }
 
 // isdir() checks whether the node describes a directory.
