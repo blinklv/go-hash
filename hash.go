@@ -3,7 +3,7 @@
 // Author: blinklv <blinklv@icloud.com>
 // Create Time: 2019-10-23
 // Maintainer: blinklv <blinklv@icloud.com>
-// Last Change: 2019-11-12
+// Last Change: 2019-11-13
 
 // A simple command tool to calculate the digest value of files. It supports some
 // primary Message-Digest Hash algorithms, like MD5, FNV family, and SHA family.
@@ -185,24 +185,27 @@ func parse_arg() []string {
 	return flag.Args() // Root files to be processed.
 }
 
-// Traverse a directory tree in pre-order and push nodes to the output channel.
+// walk() traverses a directory tree in pre-order and push nodes to the output channel.
+// This function will exit early if the 'exit' parameter triggers.
 func walk(exit trigger, roots []string) (output chan *node) {
 	output = make(chan *node)
 	go func() {
-		// Initialize the node stack. Cause the depth of root nodes
-		// is zero; the depth of their parent is -1.
-		var S []*node
+		// S means the node stack which is used for DFS (Depth-First Search).
+		// If users don't specify any file or directory, an empty node will
+		// be used which represents the standard input.
+		var S = []*node{&node{}}
 		if len(roots) > 0 {
 			S = (&node{depth: -1}).nodes(roots)
-		} else {
-			S = []*node{&node{}}
 		}
 
-		// Iterate the node stack.
-		var top *node
-		for i := 0; len(S) > 0; {
-			top, S = S[len(S)-1], S[:len(S)-1]        // Pop the top node.
-			if !(*_all) && isHidden(top.filename()) { // Skip hidden files.
+		var (
+			top *node
+			i   int // Walk sequence.
+		)
+
+		for len(S) > 0 {
+			top, S = S[len(S)-1], S[:len(S)-1]
+			if !(*_all) && isHidden(top.filename()) {
 				continue
 			}
 
@@ -235,11 +238,13 @@ func digester(input chan *node) (output chan *node) {
 			// safe, so we need to create a new one for each goroutine.
 			h := creator()
 			for n := range input {
-				h.Reset() // Key step!
+				if n.err == nil {
+					h.Reset() // Key step!
 
-				data, err := n.read()
-				h.Write(data)
-				n.sum, n.err = h.Sum(nil), err
+					data, err := n.read()
+					h.Write(data)
+					n.sum, n.err = h.Sum(nil), err
+				}
 				output <- n
 			}
 		})
