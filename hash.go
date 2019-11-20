@@ -3,7 +3,7 @@
 // Author: blinklv <blinklv@icloud.com>
 // Create Time: 2019-10-23
 // Maintainer: blinklv <blinklv@icloud.com>
-// Last Change: 2019-11-13
+// Last Change: 2019-11-20
 
 // A simple command tool to calculate the digest value of files. It supports some
 // primary Message-Digest Hash algorithms, like MD5, FNV family, and SHA family.
@@ -54,6 +54,9 @@ var sumSize int
 
 // Keyed-Hash Message Authentication Code (HMAC) sign key.
 var hmacKey []byte
+
+// Reports whether there is an error when calculating digests.
+var errorExists bool
 
 // Standard input, standard output, and standard error file descriptors.
 // The only reason I rename these three variables is simplifying my codes :)
@@ -146,11 +149,14 @@ func main() {
 		close(exit)
 		<-done
 	case <-done:
+		if errorExists {
+			os.Exit(1)
+		}
 	}
 	return
 }
 
-// Parse the command arguments and return root files.
+// parse_arg() parses the command arguments and returns root files.
 func parse_arg() []string {
 	flag.Usage = func() { help(stderr) } // overwrite the default usage.
 	flag.Parse()
@@ -278,7 +284,11 @@ func queue(input chan *node) (output chan *node) {
 // display() outputs the digest of files to the standard output.
 func display(input chan *node) {
 	for n := range input {
-		if n.isregular() {
+		switch {
+		case n.err != nil:
+			errorExists = true
+			fallthrough
+		case n.isregular():
 			fprintf(stdout, "%s\n", n)
 		}
 	}
