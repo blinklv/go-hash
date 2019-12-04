@@ -13,6 +13,27 @@ import (
 	"testing"
 )
 
+func TestPad(t *testing.T) {
+	for _, env := range []struct {
+		str    string
+		width  int
+		result string
+	}{
+		{"", -1, ""},
+		{"Hello", -1, "Hello"},
+		{"", 0, ""},
+		{"Hello", 0, "Hello"},
+		{"", 1, " "},
+		{"Hello", 1, "Hello"},
+		{"", 10, "          "},
+		{"Hello", 10, "Hello     "},
+	} {
+		result := pad(env.str, env.width)
+		a := assert.New(t)
+		a.Equalf(env.result, result, "%#v", env)
+	}
+}
+
 func TestCRun(t *testing.T) {
 	for _, env := range []struct {
 		cnum    int
@@ -30,28 +51,7 @@ func TestCRun(t *testing.T) {
 				atomic.AddInt64(&(env.counter), 1)
 			}
 		})
-		a := &assertions{assert.New(t), env}
-		a.equalf(env.result, env.counter, "counter:%d != result:%d", env.counter, env.result)
+		a := assert.New(t)
+		a.Equalf(env.result, env.counter, "%#v", env)
 	}
-}
-
-// Wraps assert.Assertions to output environment information.
-type assertions struct {
-	*assert.Assertions
-	env interface{}
-}
-
-func (a *assertions) equalf(expected, actual interface{}, msg string, args ...interface{}) bool {
-	return a.Equalf(int2int64(expected), int2int64(actual), sprintf("%#v %s", a.env, msg), args...)
-}
-
-func (a *assertions) not_equalf(expected, actual interface{}, msg string, args ...interface{}) bool {
-	return a.NotEqualf(int2int64(expected), int2int64(actual), sprintf("%#v %s", a.env, msg), args...)
-}
-
-func int2int64(i interface{}) interface{} {
-	if v, ok := i.(int); ok {
-		return int64(v)
-	}
-	return i
 }
