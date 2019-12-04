@@ -3,7 +3,7 @@
 // Author: blinklv <blinklv@icloud.com>
 // Create Time: 2019-10-23
 // Maintainer: blinklv <blinklv@icloud.com>
-// Last Change: 2019-11-20
+// Last Change: 2019-12-04
 
 // A simple command tool to calculate the digest value of files. It supports some
 // primary Message-Digest Hash algorithms, like MD5, FNV family, and SHA family.
@@ -527,12 +527,16 @@ func split(rest string, width int) []string {
 }
 
 // cut() cuts a string into two parts. The second part will be empty when
-// the size of a string is not greater than the cut point.
+// the size of a string is not greater than the cut point; the first part
+// will be empty when the cut point is non-positive.
 func cut(str string, cp int /* cut point */) (a, b string) {
-	if len(str) > cp {
+	if cp <= 0 {
+		return "", str
+	} else if cp < len(str) {
 		return str[:cp], str[cp:]
+	} else {
+		return str, ""
 	}
-	return str, ""
 }
 
 // pad() pads extra blank spaces to a string to make its size reach the width.
