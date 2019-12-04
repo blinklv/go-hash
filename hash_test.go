@@ -13,6 +13,26 @@ import (
 	"testing"
 )
 
+func TestSplit(t *testing.T) {
+	for _, env := range []struct {
+		rest  string
+		width int
+		lines []string
+	}{
+		{"", -1, []string{}},
+		{"Hello", -1, []string{}},
+		{"", 0, []string{}},
+		{"Hello", 0, []string{}},
+		{"", 1, []string{}},
+		{"Hello", 1, []string{"H", "e", "l", "l", "o"}},
+		{"What do you want to do?", 4, []string{"What", " do ", "you ", "want", " to ", "do?"}},
+	} {
+		lines := split(env.rest, env.width)
+		a := assert.New(t)
+		a.Equalf(env.lines, lines, "%#v", env)
+	}
+}
+
 func TestCut(t *testing.T) {
 	for _, env := range []struct {
 		str  string
