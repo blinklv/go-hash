@@ -13,6 +13,29 @@ import (
 	"testing"
 )
 
+func TestCut(t *testing.T) {
+	for _, env := range []struct {
+		str  string
+		cp   int
+		a, b string
+	}{
+		{"", -1, "", ""},
+		{"", 0, "", ""},
+		{"", 1, "", ""},
+		{"Hello", -1, "", "Hello"},
+		{"Hello", 0, "", "Hello"},
+		{"Hello", 1, "H", "ello"},
+		{"Hello", 3, "Hel", "lo"},
+		{"Hello", 5, "Hello", ""},
+		{"Hello", 7, "Hello", ""},
+	} {
+		a, b := cut(env.str, env.cp)
+		ast := assert.New(t)
+		ast.Equalf(env.a, a, "%#v", env)
+		ast.Equalf(env.b, b, "%#v", env)
+	}
+}
+
 func TestPad(t *testing.T) {
 	for _, env := range []struct {
 		str    string
