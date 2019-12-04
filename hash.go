@@ -513,13 +513,14 @@ func readdir(dirname string) ([]string, error) {
 }
 
 // split() slices a string into substrings of the fixed-width except for the last line.
+// If the width is non-positive, returns an empty []string.
 func split(rest string, width int) []string {
 	var (
 		line  string
 		lines = make([]string, 0, 1)
 	)
 
-	for rest != "" {
+	for width > 0 && rest != "" {
 		line, rest = cut(rest, width)
 		lines = append(lines, line)
 	}
