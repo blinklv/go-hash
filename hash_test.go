@@ -8,7 +8,11 @@
 package main
 
 import (
+	"encoding/base64"
+	"encoding/hex"
 	"github.com/stretchr/testify/assert"
+	"io/ioutil"
+	"os"
 	"sync/atomic"
 	"testing"
 )
@@ -27,6 +31,37 @@ func TestSecretKeyInit(t *testing.T) {
 		a := assert.New(t)
 		a.Equalf(env.ok, err == nil, "%+v", env)
 		a.Equalf(env.key, key, "%+v", env)
+	}
+}
+
+func TestSecretKeyDecode(t *testing.T) {
+	content := []byte("Hello, World!")
+	tmpfile, _ := ioutil.TempFile("", "hello.*.txt")
+	defer os.Remove(tmpfile.Name())
+	tmpfile.Write(content)
+	tmpfile.Close()
+
+	b64Data := base64.StdEncoding.EncodeToString(content)
+	hexData := hex.EncodeToString(content)
+
+	for _, env := range []struct {
+		key secretKey
+		ok  bool
+		b   []byte
+	}{
+		{secretKey{}, false, nil},
+		{secretKey{scheme: "foo"}, false, nil},
+		{secretKey{scheme: "binary", data: ""}, false, nil},
+		{secretKey{scheme: "binary", data: tmpfile.Name()}, true, content},
+		{secretKey{scheme: "base64", data: "Are you OK?"}, false, []byte{}},
+		{secretKey{scheme: "base64", data: b64Data}, true, content},
+		{secretKey{scheme: "hex", data: "Foo"}, false, []byte{}},
+		{secretKey{scheme: "hex", data: hexData}, true, content},
+	} {
+		data, err := env.key.decode()
+		a := assert.New(t)
+		a.Equalf(env.ok, err == nil, "%+v", env)
+		a.Equalf(env.b, data, "%+v", env)
 	}
 }
 
