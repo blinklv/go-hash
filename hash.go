@@ -3,7 +3,7 @@
 // Author: blinklv <blinklv@icloud.com>
 // Create Time: 2019-10-23
 // Maintainer: blinklv <blinklv@icloud.com>
-// Last Change: 2019-12-04
+// Last Change: 2019-12-05
 
 // A simple command tool to calculate the digest value of files. It supports some
 // primary Message-Digest Hash algorithms, like MD5, FNV family, and SHA family.
@@ -177,7 +177,7 @@ func parse_arg() []string {
 	sumSize = (creator()).Size()
 
 	if *_hmac_key != "" {
-		key, err := (&secretKey{}).initialize(*_hmac_key)
+		key, err := (&secretKey{}).init(*_hmac_key)
 		if err != nil {
 			exit(err)
 		}
@@ -331,9 +331,9 @@ type node struct {
 	err   error
 }
 
-// initialize() initializes a node instance by using its path and returns itself.
+// init() inits a node instance by using its path and returns itself.
 // If something wrong, it will store the error to the err field.
-func (n *node) initialize(path string) *node {
+func (n *node) init(path string) *node {
 	n.path = path
 	n.FileInfo, n.err = os.Lstat(path)
 	return n
@@ -365,7 +365,7 @@ func (n *node) nodes(names []string) []*node {
 	for _, name := range rsort(names) {
 		ns = append(ns, (&node{
 			depth: n.depth + 1,
-		}).initialize(filepath.Join(n.path, name)))
+		}).init(filepath.Join(n.path, name)))
 	}
 	return ns
 }
@@ -467,8 +467,8 @@ type secretKey struct {
 	data   string
 }
 
-// initialize() initializes a secretKey instance from *_key options (eg. hmac_key)
-func (key *secretKey) initialize(str string) (*secretKey, error) {
+// init() inits a secretKey instance from *_key options (eg. hmac_key)
+func (key *secretKey) init(str string) (*secretKey, error) {
 	strs := strings.SplitN(str, ":", 2)
 	if len(strs) != 2 {
 		return nil, errorf("invalid secret key '%s'", str)
