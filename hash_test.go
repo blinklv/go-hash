@@ -13,6 +13,23 @@ import (
 	"testing"
 )
 
+func TestSecretKeyInit(t *testing.T) {
+	for _, env := range []struct {
+		str string
+		ok  bool
+		key *secretKey
+	}{
+		{"what's wrong with you?", false, nil},
+		{"binary:tmp.txt", true, &secretKey{"binary", "tmp.txt"}},
+		{"hex:abcd1234", true, &secretKey{"hex", "abcd1234"}},
+	} {
+		key, err := (&secretKey{}).init(env.str)
+		a := assert.New(t)
+		a.Equalf(env.ok, err == nil, "%+v", env)
+		a.Equalf(env.key, key, "%+v", env)
+	}
+}
+
 func TestRsort(t *testing.T) {
 	for _, env := range []struct {
 		strs   []string
