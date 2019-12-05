@@ -3,7 +3,7 @@
 // Author: blinklv <blinklv@icloud.com>
 // Create Time: 2019-12-04
 // Maintainer: blinklv <blinklv@icloud.com>
-// Last Change: 2019-12-04
+// Last Change: 2019-12-05
 
 package main
 
@@ -12,6 +12,25 @@ import (
 	"sync/atomic"
 	"testing"
 )
+
+func TestRsort(t *testing.T) {
+	for _, env := range []struct {
+		strs   []string
+		result []string
+	}{
+		{nil, nil},
+		{[]string{}, []string{}},
+		{[]string{"a"}, []string{"a"}},
+		{
+			[]string{"a", "b", "foo", "car", "hello", "world"},
+			[]string{"world", "hello", "foo", "car", "b", "a"},
+		},
+	} {
+		rsort(env.strs)
+		a := assert.New(t)
+		a.Equalf(env.result, env.strs, "%+v", env)
+	}
+}
 
 func TestSplit(t *testing.T) {
 	for _, env := range []struct {
@@ -29,7 +48,7 @@ func TestSplit(t *testing.T) {
 	} {
 		lines := split(env.rest, env.width)
 		a := assert.New(t)
-		a.Equalf(env.lines, lines, "%#v", env)
+		a.Equalf(env.lines, lines, "%+v", env)
 	}
 }
 
@@ -51,8 +70,8 @@ func TestCut(t *testing.T) {
 	} {
 		a, b := cut(env.str, env.cp)
 		ast := assert.New(t)
-		ast.Equalf(env.a, a, "%#v", env)
-		ast.Equalf(env.b, b, "%#v", env)
+		ast.Equalf(env.a, a, "%+v", env)
+		ast.Equalf(env.b, b, "%+v", env)
 	}
 }
 
@@ -73,7 +92,7 @@ func TestPad(t *testing.T) {
 	} {
 		result := pad(env.str, env.width)
 		a := assert.New(t)
-		a.Equalf(env.result, result, "%#v", env)
+		a.Equalf(env.result, result, "%+v", env)
 	}
 }
 
@@ -95,6 +114,6 @@ func TestCRun(t *testing.T) {
 			}
 		})
 		a := assert.New(t)
-		a.Equalf(env.result, env.counter, "%#v", env)
+		a.Equalf(env.result, env.counter, "%+v", env)
 	}
 }
