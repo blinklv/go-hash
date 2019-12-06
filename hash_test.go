@@ -18,6 +18,33 @@ import (
 	"testing"
 )
 
+func TestNodeFilename(t *testing.T) {
+	tmpfile, _ := ioutil.TempFile("", "hello.*.txt")
+	defer os.Remove(tmpfile.Name())
+	fileinfo, _ := tmpfile.Stat()
+
+	for _, env := range []struct {
+		n      node
+		result string
+	}{
+		{
+			n:      node{FileInfo: fileinfo, path: "/foo/bar"},
+			result: fileinfo.Name(),
+		},
+		{
+			n:      node{path: "/foo/bar"},
+			result: "bar",
+		},
+		{
+			n:      node{},
+			result: "-",
+		},
+	} {
+		a := assert.New(t)
+		a.Equalf(env.result, env.n.filename(), "%+v", env)
+	}
+}
+
 func TestNodeString(t *testing.T) {
 	for _, env := range []struct {
 		n        node
