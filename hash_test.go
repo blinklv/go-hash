@@ -8,6 +8,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/hex"
 	"github.com/stretchr/testify/assert"
@@ -17,6 +18,76 @@ import (
 	"sync/atomic"
 	"testing"
 )
+
+func TestDisplay(t *testing.T) {
+	for _, env := range []struct {
+		input       []*node
+		sumSize     int
+		stdout      *bytes.Buffer
+		result      []string
+		errorExists bool
+	}{
+		{
+			input:       []*node{},
+			stdout:      &bytes.Buffer{},
+			result:      []string{},
+			errorExists: false,
+		},
+		{
+			input: []*node{
+				&node{path: "/hello/world", sum: []byte{0x12, 0x34, 0x56}},
+				&node{path: "/foo/bar", sum: []byte{0xab, 0xcd, 0xef}},
+				&node{path: "/hello/bar", sum: []byte{0x12, 0xcd, 0x56}},
+			},
+			stdout: &bytes.Buffer{},
+			result: []string{
+				"123456  /hello/world\n",
+				"abcdef  /foo/bar\n",
+				"12cd56  /hello/bar\n",
+			},
+			errorExists: false,
+		},
+		{
+			input: []*node{
+				&node{path: "/hello/world", sum: []byte{0x12, 0x34, 0x56}},
+				&node{path: "/foo/bar", sum: []byte{0xab, 0xcd, 0xef}},
+				&node{path: "/hello/bar", sum: []byte{0x12, 0xcd, 0x56}},
+				&node{path: "/error", err: errorf("something wrong!")},
+			},
+			sumSize: 3,
+			stdout:  &bytes.Buffer{},
+			result: []string{
+				"123456  /hello/world\n",
+				"abcdef  /foo/bar\n",
+				"12cd56  /hello/bar\n",
+				"ERROR:  /error\n",
+				" somet\n",
+				"hing w\n",
+				"rong! \n",
+			},
+			errorExists: true,
+		},
+	} {
+		sumSize = env.sumSize
+		stdout = env.stdout
+		display(toInput(env.input))
+
+		a := assert.New(t)
+		a.Equalf(strings.Join(env.result, ""), env.stdout.String(), "%+v", env)
+		a.Equalf(env.errorExists, errorExists, "%+v", env)
+	}
+}
+
+func toInput(nodes []*node) chan *node {
+	input := make(chan *node)
+	go func() {
+		for _, n := range nodes {
+			input <- n
+		}
+		close(input)
+	}()
+	return input
+}
 
 func TestNodeNodes(t *testing.T) {
 	for _, env := range []struct {
