@@ -18,6 +18,48 @@ import (
 	"testing"
 )
 
+func TestNodeNodes(t *testing.T) {
+	for _, env := range []struct {
+		n      node
+		names  []string
+		result []*node
+	}{
+		{
+			node{path: "", depth: -1},
+			[]string{},
+			[]*node{},
+		},
+		{
+			node{path: "", depth: -1},
+			[]string{"foo", "bar", "/hello", "Apollo"},
+			[]*node{
+				&node{path: "foo", depth: 0},
+				&node{path: "bar", depth: 0},
+				&node{path: "Apollo", depth: 0},
+				&node{path: "/hello", depth: 0},
+			},
+		},
+		{
+			node{path: "./foo/bar", depth: 10},
+			[]string{"a/b/c", "Foo", "Hello World", ".", "/What/do/you"},
+			[]*node{
+				&node{path: "foo/bar/a/b/c", depth: 11},
+				&node{path: "foo/bar/Hello World", depth: 11},
+				&node{path: "foo/bar/Foo", depth: 11},
+				&node{path: "foo/bar/What/do/you", depth: 11},
+				&node{path: "foo/bar", depth: 11},
+			},
+		},
+	} {
+		nodes := env.n.nodes(env.names)
+		a := assert.New(t)
+		for i, n := range nodes {
+			a.Equalf(env.result[i].path, n.path, "%+v", env)
+			a.Equalf(env.n.depth+1, n.depth, "%+v", env)
+		}
+	}
+}
+
 func TestNodeFilename(t *testing.T) {
 	tmpfile, _ := ioutil.TempFile("", "hello.*.txt")
 	defer os.Remove(tmpfile.Name())
@@ -170,6 +212,10 @@ func TestRsort(t *testing.T) {
 		{
 			[]string{"a", "b", "foo", "car", "hello", "world"},
 			[]string{"world", "hello", "foo", "car", "b", "a"},
+		},
+		{
+			[]string{"a", "b", "foo", "H", "car", ".", "/", "hello", "world"},
+			[]string{"world", "hello", "foo", "car", "b", "a", "H", "/", "."},
 		},
 	} {
 		rsort(env.strs)
