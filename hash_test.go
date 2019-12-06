@@ -3,7 +3,7 @@
 // Author: blinklv <blinklv@icloud.com>
 // Create Time: 2019-12-04
 // Maintainer: blinklv <blinklv@icloud.com>
-// Last Change: 2019-12-05
+// Last Change: 2019-12-06
 
 package main
 
@@ -13,9 +13,76 @@ import (
 	"github.com/stretchr/testify/assert"
 	"io/ioutil"
 	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 )
+
+func TestNodeString(t *testing.T) {
+	for _, env := range []struct {
+		n        node
+		filename bool
+		sumSize  int
+		result   string
+	}{
+		{
+			n:        node{path: "/foo/bar", sum: []byte{0xab, 0x12, 0x33}, err: nil},
+			filename: true,
+			sumSize:  4,
+			result:   "ab1233  /foo/bar",
+		},
+		{
+			n:        node{path: "/foo/bar", sum: []byte{0xab, 0x12, 0x33}, err: nil},
+			filename: false,
+			sumSize:  4,
+			result:   "ab1233",
+		},
+		{
+			n: node{
+				path: "/foo/bar",
+				sum:  []byte{},
+				err:  errorf("What do you want to do? Are you kidding me?"),
+			},
+			filename: false,
+			sumSize:  4,
+			result: strings.Join(
+				[]string{
+					"ERROR: W  /foo/bar",
+					"hat do y",
+					"ou want ",
+					"to do? A",
+					"re you k",
+					"idding m",
+					"e?      ",
+				},
+				"\n",
+			),
+		},
+		{
+			n: node{
+				path: "/foo/bar",
+				sum:  []byte{},
+				err:  errorf("What do you want to do? Are you kidding me?"),
+			},
+			filename: false,
+			sumSize:  8,
+			result: strings.Join(
+				[]string{
+					"ERROR: What do y  /foo/bar",
+					"ou want to do? A",
+					"re you kidding m",
+					"e?              ",
+				},
+				"\n",
+			),
+		},
+	} {
+		*_filename = env.filename
+		sumSize = env.sumSize
+		a := assert.New(t)
+		a.Equalf(env.result, env.n.String(), "%+v", env)
+	}
+}
 
 func TestSecretKeyInit(t *testing.T) {
 	for _, env := range []struct {
