@@ -3,7 +3,7 @@
 // Author: blinklv <blinklv@icloud.com>
 // Create Time: 2019-10-23
 // Maintainer: blinklv <blinklv@icloud.com>
-// Last Change: 2019-12-05
+// Last Change: 2019-12-06
 
 // A simple command tool to calculate the digest value of files. It supports some
 // primary Message-Digest Hash algorithms, like MD5, FNV family, and SHA family.
@@ -60,7 +60,7 @@ var errorExists bool
 
 // Standard input, standard output, and standard error file descriptors.
 // The only reason I rename these three variables is simplifying my codes :)
-var stdin, stdout, stderr = os.Stdin, os.Stdout, os.Stderr
+var stdin, stdout, stderr io.Writer = os.Stdin, os.Stdout, os.Stderr
 
 // factories variable specifies all HASH algorithms supported by this tool.
 var factories = map[string]factory{
