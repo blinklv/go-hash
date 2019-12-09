@@ -3,7 +3,7 @@
 // Author: blinklv <blinklv@icloud.com>
 // Create Time: 2019-12-04
 // Maintainer: blinklv <blinklv@icloud.com>
-// Last Change: 2019-12-06
+// Last Change: 2019-12-09
 
 package main
 
@@ -18,6 +18,62 @@ import (
 	"sync/atomic"
 	"testing"
 )
+
+func TestQueue(t *testing.T) {
+	for _, env := range []struct {
+		input []*node
+	}{
+		{
+			input: []*node{
+				&node{i: 0},
+				&node{i: 1},
+				&node{i: 2},
+				&node{i: 3},
+				&node{i: 4},
+				&node{i: 5},
+				&node{i: 6},
+				&node{i: 7},
+				&node{i: 8},
+				&node{i: 9},
+			},
+		},
+		{
+			input: []*node{
+				&node{i: 9},
+				&node{i: 8},
+				&node{i: 7},
+				&node{i: 6},
+				&node{i: 5},
+				&node{i: 4},
+				&node{i: 3},
+				&node{i: 2},
+				&node{i: 1},
+				&node{i: 0},
+			},
+		},
+		{
+			input: []*node{
+				&node{i: 0},
+				&node{i: 4},
+				&node{i: 2},
+				&node{i: 5},
+				&node{i: 1},
+				&node{i: 3},
+				&node{i: 8},
+				&node{i: 6},
+				&node{i: 9},
+				&node{i: 7},
+			},
+		},
+	} {
+		a := assert.New(t)
+		i := 0
+		for n := range queue(toInput(env.input)) {
+			a.Equalf(n.i, i, "%+v", env)
+			i++
+		}
+	}
+}
 
 func TestDisplay(t *testing.T) {
 	for _, env := range []struct {
