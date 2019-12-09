@@ -1,6 +1,6 @@
 # go-hash
 
-![Building](https://img.shields.io/badge/building-passing-green.svg)
+[![Build Status](https://travis-ci.com/blinklv/go-hash.svg?branch=master)](https://travis-ci.com/blinklv/go-hash)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Version](https://img.shields.io/badge/version-1.0.0-green.svg)
 
